@@ -4,7 +4,9 @@
 
 DevTweaks is a spiritual successor to [SwiftTweaks](https://github.com/bryanjclark/SwiftTweaks) — the beloved library that let you fine-tune your app without recompiling. DevTweaks brings that same magic to modern SwiftUI with a declarative DSL, real-time editing, and zero production overhead.
 
-<!-- TODO: hero screenshot/gif here -->
+<p align="center">
+  <img src="Assets/panel-screenshot.png" alt="DevTweaks panel showing sliders, pickers, and toggles" width="280">
+</p>
 
 ## Why?
 
@@ -12,7 +14,9 @@ Because recompiling to change an animation duration by 0.05 seconds is a crime a
 
 DevTweaks lets you define tweakable parameters once and get a full debug panel for free. Drag sliders, flip toggles, pick options — see changes instantly without a rebuild.
 
-<!-- TODO: gif of real-time slider editing here -->
+<p align="center">
+  <img src="Assets/realtime-tweaking.gif" alt="Real-time shader tweaking with DevTweaks" width="280">
+</p>
 
 ## Features
 
