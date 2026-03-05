@@ -10,9 +10,8 @@ import SwiftUI
 
 /// Public entry point for installing the DevTweaks UI into your app.
 ///
-/// Call `install(store:)` once in your `AppDelegate` or `SceneDelegate` to set up:
-/// - A floating button (bottom-left) that opens the panel
-/// - A two-finger double-tap gesture on the main window
+/// Call `install(store:)` once at launch — it's safe to call from
+/// `didFinishLaunchingWithOptions` before a window scene is connected.
 ///
 /// ```swift
 /// #if DEBUG
@@ -28,11 +27,15 @@ public enum TweakPanel {
 
     /// Installs the tweak panel UI.
     ///
+    /// Safe to call from `didFinishLaunchingWithOptions` — if no window scene
+    /// is connected yet, setup defers automatically until one activates.
+    ///
     /// - Parameters:
     ///   - store: The `TweakStore` containing all tweak definitions.
     ///   - tabs: Optional custom tabs to show alongside the tweaks browser.
     ///   - buttonIcon: SF Symbol name for the floating button. Defaults to `"slider.vertical.3"`.
     ///   - buttonInitiallyVisible: Whether the floating button starts visible. Defaults to `true`.
+    ///   - shakeToToggleButton: Whether shaking the device toggles button visibility. Defaults to `true`.
     ///   - onDismiss: Optional closure called when the panel is dismissed.
     @available(iOS 16.0, *)
     public static func install(
@@ -40,6 +43,7 @@ public enum TweakPanel {
         tabs: [TweakTab] = [],
         buttonIcon: String = "slider.vertical.3",
         buttonInitiallyVisible: Bool = true,
+        shakeToToggleButton: Bool = true,
         onDismiss: (() -> Void)? = nil
     ) {
         #if DEBUG
@@ -48,6 +52,7 @@ public enum TweakPanel {
             tabs: tabs,
             buttonIcon: buttonIcon,
             buttonInitiallyVisible: buttonInitiallyVisible,
+            shakeToToggleButton: shakeToToggleButton,
             onDismiss: onDismiss
         )
         manager.setup()

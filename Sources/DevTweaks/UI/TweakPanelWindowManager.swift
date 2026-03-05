@@ -18,30 +18,56 @@ final class TweakPanelWindowManager: NSObject {
     let tabs: [TweakTab]
     let onDismiss: (() -> Void)?
     let buttonIcon: String
+    let shakeToToggleButton: Bool
 
     let buttonState: TweakPanelButtonState
 
     private var buttonWindow: PassThroughWindow?
     private var panelWindow: UIWindow?
+    private var sceneObserver: NSObjectProtocol?
 
     init(
         store: TweakStore,
         tabs: [TweakTab],
         buttonIcon: String,
         buttonInitiallyVisible: Bool,
+        shakeToToggleButton: Bool,
         onDismiss: (() -> Void)?
     ) {
         self.store = store
         self.tabs = tabs
         self.buttonIcon = buttonIcon
+        self.shakeToToggleButton = shakeToToggleButton
         self.onDismiss = onDismiss
         self.buttonState = TweakPanelButtonState(initiallyVisible: buttonInitiallyVisible)
         super.init()
     }
 
-    /// Sets up both windows. Call once after the app's main window is available.
+    /// Sets up both windows. Safe to call from `didFinishLaunchingWithOptions` —
+    /// if no window scene is connected yet, setup defers until one activates.
     func setup() {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        if shakeToToggleButton {
+            UIWindow.devTweaks_enableShakeToToggle()
+        }
+
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else {
+            // Scene not ready yet — defer until one activates
+            sceneObserver = NotificationCenter.default.addObserver(
+                forName: UIScene.didActivateNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                if let observer = self?.sceneObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    self?.sceneObserver = nil
+                }
+                self?.setup()
+            }
+            return
+        }
+
+        // Prevent double-setup if called again from the deferred observer
+        guard buttonWindow == nil else { return }
 
         // Button window (always visible, touch-transparent)
         let btnWin = PassThroughWindow(frame: UIScreen.main.bounds)
@@ -107,6 +133,39 @@ extension TweakPanelWindowManager: UISheetPresentationControllerDelegate {
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
         panelWindow?.isHidden = true
         onDismiss?()
+    }
+}
+
+// MARK: - Shake Detection
+
+extension UIWindow {
+    private static var _devTweaksShakeSwizzled = false
+
+    /// Swizzles `motionEnded` on UIWindow to detect device shakes.
+    /// Idempotent — safe to call multiple times.
+    static func devTweaks_enableShakeToToggle() {
+        guard !_devTweaksShakeSwizzled else { return }
+        _devTweaksShakeSwizzled = true
+
+        let original = #selector(UIWindow.motionEnded(_:with:))
+        let swizzled = #selector(UIWindow.devTweaks_motionEnded(_:with:))
+
+        guard let originalMethod = class_getInstanceMethod(UIWindow.self, original),
+              let swizzledMethod = class_getInstanceMethod(UIWindow.self, swizzled)
+        else { return }
+
+        method_exchangeImplementations(originalMethod, swizzledMethod)
+    }
+
+    @objc private func devTweaks_motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        // Call original implementation (method is swizzled, so this calls the real motionEnded)
+        devTweaks_motionEnded(motion, with: event)
+
+        if motion == .motionShake {
+            if #available(iOS 16.0, *) {
+                TweakPanel.buttonState?.toggle()
+            }
+        }
     }
 }
 #endif
