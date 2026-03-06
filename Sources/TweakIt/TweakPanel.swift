@@ -61,14 +61,12 @@ public enum TweakPanel {
     }
 
     /// The button state, for toggling visibility from UIKit code.
+    #if DEBUG
     @available(iOS 16.0, *)
     public static var buttonState: TweakPanelButtonState? {
-        #if DEBUG
         return windowManager?.buttonState
-        #else
-        return nil
-        #endif
     }
+    #endif
 
     /// Programmatically presents the tweak panel.
     ///
