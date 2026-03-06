@@ -1,6 +1,6 @@
 //
 //  Shaders.metal
-//  DevTweaksDemo
+//  TweakItDemo
 //
 //  Stitchable Metal shaders for SwiftUI .colorEffect().
 //  Signature: half4 name(float2 position, half4 color, float2 size, ...params...)
