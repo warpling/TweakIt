@@ -46,7 +46,7 @@ struct TweakPanelButtonContainer<Content: View>: View {
     @ObservedObject var state: TweakPanelButtonState
     let alignment: Alignment
     let inset: CGFloat
-    let ignoresSafeArea: Bool
+    let ignoresSafeAreaEdges: Edge.Set
     /// Extra bottom padding applied on the container, after `inset` — kept
     /// internal for the legacy `install` overload's `buttonBottomOffset`.
     /// Applied here (not inside `content`) so it doesn't shrink the reported
@@ -77,21 +77,23 @@ struct TweakPanelButtonContainer<Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
         .padding(inset)
         .padding(.bottom, bottomOffset)
-        .modifier(IgnoreSafeAreaIf(active: ignoresSafeArea))
+        .modifier(IgnoreSafeAreaEdges(edges: ignoresSafeAreaEdges))
         .onPreferenceChange(ButtonFrameKey.self) { state.buttonFrame = $0 }
     }
 
     @Namespace private var glassNamespace
 }
 
-/// `.ignoresSafeArea()` isn't conditionally applicable inline without
-/// changing the view's type, so it's wrapped in a modifier.
+/// `.ignoresSafeArea(edges:)` isn't conditionally applicable inline without
+/// changing the view's type, so it's wrapped in a modifier. An empty edge set
+/// leaves the content untouched rather than calling `.ignoresSafeArea(edges: [])`,
+/// which is itself a no-op but would still change the view's type.
 @available(iOS 16.0, *)
-private struct IgnoreSafeAreaIf: ViewModifier {
-    let active: Bool
+private struct IgnoreSafeAreaEdges: ViewModifier {
+    let edges: Edge.Set
     @ViewBuilder
     func body(content: Content) -> some View {
-        if active { content.ignoresSafeArea() } else { content }
+        if edges.isEmpty { content } else { content.ignoresSafeArea(edges: edges) }
     }
 }
 

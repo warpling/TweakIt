@@ -11,7 +11,7 @@ The library is designed so that your shipping binary pays zero cost for debug tw
 | API | Behavior when disabled |
 |---|---|
 | ``TweakPanel/install(store:tabs:buttonIcon:buttonInitiallyVisible:buttonBottomOffset:shakeToToggleButton:onDismiss:)`` | No-op |
-| ``TweakPanel/install(store:tabs:buttonAlignment:buttonInset:buttonIgnoresSafeArea:buttonInitiallyVisible:shakeToToggleButton:onDismiss:button:)`` | No-op |
+| ``TweakPanel/install(store:tabs:buttonAlignment:buttonInset:buttonIgnoresSafeAreaEdges:buttonInitiallyVisible:shakeToToggleButton:onDismiss:button:)`` | No-op |
 | ``TweakPanel/present(selectingTab:)`` | No-op |
 | ``TweakPanel/makeWindow(windowScene:)`` | Returns a standard `UIWindow` |
 | ``TweakPanel/buttonState`` | Returns `nil` |

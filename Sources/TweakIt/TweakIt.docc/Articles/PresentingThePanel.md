@@ -52,14 +52,14 @@ TweakPanel.buttonState?.toggle()  // animated
 
 ## Custom Button
 
-If the built-in circle doesn't match your app's design system, supply your own with ``TweakPanel/install(store:tabs:buttonAlignment:buttonInset:buttonIgnoresSafeArea:buttonInitiallyVisible:shakeToToggleButton:onDismiss:button:)``. The package still owns the pass-through window, visibility state, shake-to-toggle, and presentation — you only supply appearance and placement:
+If the built-in circle doesn't match your app's design system, supply your own with ``TweakPanel/install(store:tabs:buttonAlignment:buttonInset:buttonIgnoresSafeAreaEdges:buttonInitiallyVisible:shakeToToggleButton:onDismiss:button:)``. The package still owns the pass-through window, visibility state, shake-to-toggle, and presentation — you only supply appearance and placement:
 
 ```swift
 TweakPanel.install(
     store: AppTweaks.store,
-    buttonAlignment: .bottomLeading,
+    buttonAlignment: .bottomTrailing,
     buttonInset: 24,
-    buttonIgnoresSafeArea: true
+    buttonIgnoresSafeAreaEdges: .bottom
 ) { present in
     Button(action: present) {
         Image(systemName: "slider.vertical.3")
@@ -72,7 +72,11 @@ TweakPanel.install(
 }
 ```
 
-`buttonAlignment` pins the button to any corner (or edge), and `buttonInset` sets its distance from the container. By default that inset is measured from the safe area, which makes it impossible to line the button up with chrome anchored to the physical screen corner — set `buttonIgnoresSafeArea: true` to measure `buttonInset` from the physical edge instead, as in the example above.
+`buttonAlignment` pins the button to any corner (or edge), and `buttonInset` sets its distance from the container. By default that inset is measured from the safe area on every edge.
+
+`buttonIgnoresSafeAreaEdges` opts specific edges out of that. Pass `.bottom`, as in the example above, and the vertical inset is measured from the physical edge instead — clearing the home indicator — so `buttonInset` alone sets the vertical gap, matching a corner-anchored settings button that does the same. The left and right edges stay measured from the safe area.
+
+That per-edge split is the point, not a nicety: the horizontal safe-area inset is zero in portrait but not in landscape, where the notch or Dynamic Island adds one. Ignore the safe area on all four edges and the button lines up fine in portrait, then silently drifts out of alignment with any safe-area-relative sibling the moment the device rotates.
 
 > Important: The view you return becomes the tappable region — the package reports the returned view's frame, and the pass-through window claims exactly that frame for touches. Keep the returned view tight to the visible control (size and shape it with `.frame(...)`/`.contentShape(...)` on the control itself) rather than adding outer padding. A view like `MyButton().padding(.bottom, 60)` creates a 60pt transparent strip that swallows touches before they ever reach your app.
 

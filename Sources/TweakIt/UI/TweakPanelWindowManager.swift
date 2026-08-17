@@ -18,7 +18,7 @@ final class TweakPanelWindowManager: NSObject {
     let onDismiss: (() -> Void)?
     let buttonAlignment: Alignment
     let buttonInset: CGFloat
-    let buttonIgnoresSafeArea: Bool
+    let buttonIgnoresSafeAreaEdges: Edge.Set
     /// Type-erased because the manager is a stored, non-generic object; the
     /// generic parameter is erased once, here, rather than at every call site.
     let buttonContent: (@escaping () -> Void) -> AnyView
@@ -40,7 +40,7 @@ final class TweakPanelWindowManager: NSObject {
         tabs: [TweakTab],
         buttonAlignment: Alignment,
         buttonInset: CGFloat,
-        buttonIgnoresSafeArea: Bool,
+        buttonIgnoresSafeAreaEdges: Edge.Set,
         buttonContent: @escaping (@escaping () -> Void) -> AnyView,
         buttonInitiallyVisible: Bool,
         buttonBottomOffset: CGFloat = 0,
@@ -51,7 +51,7 @@ final class TweakPanelWindowManager: NSObject {
         self.tabs = tabs
         self.buttonAlignment = buttonAlignment
         self.buttonInset = buttonInset
-        self.buttonIgnoresSafeArea = buttonIgnoresSafeArea
+        self.buttonIgnoresSafeAreaEdges = buttonIgnoresSafeAreaEdges
         self.buttonContent = buttonContent
         self.buttonBottomOffset = buttonBottomOffset
         self.shakeToToggleButton = shakeToToggleButton
@@ -99,7 +99,7 @@ final class TweakPanelWindowManager: NSObject {
             state: buttonState,
             alignment: buttonAlignment,
             inset: buttonInset,
-            ignoresSafeArea: buttonIgnoresSafeArea,
+            ignoresSafeAreaEdges: buttonIgnoresSafeAreaEdges,
             bottomOffset: buttonBottomOffset,
             content: { content }
         )

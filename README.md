@@ -124,9 +124,9 @@ Don't want a floating gray circle that clashes with your app? Supply your own bu
 ```swift
 TweakPanel.install(
     store: AppTweaks.store,
-    buttonAlignment: .bottomLeading,
+    buttonAlignment: .bottomTrailing,
     buttonInset: 24,
-    buttonIgnoresSafeArea: true
+    buttonIgnoresSafeAreaEdges: .bottom
 ) { present in
     Button(action: present) {
         Image(systemName: "slider.vertical.3")
@@ -138,6 +138,8 @@ TweakPanel.install(
     .background(.thinMaterial, in: Circle())
 }
 ```
+
+`buttonIgnoresSafeAreaEdges: .bottom` measures `buttonInset` from the physical bottom edge instead of the safe area, clearing the home indicator while the sides stay safe-area-relative. Do it on all four edges instead and you'll get away with it in portrait, then watch the button drift out of alignment with the rest of your chrome the moment someone rotates to landscape.
 
 TweakIt still owns the window, visibility, and shake-to-toggle — you just style and place the button. One catch: whatever view you return is exactly the tappable region, so size it to the control with `.frame`/`.contentShape` rather than padding around it, or you'll get an invisible dead zone that eats touches.
 

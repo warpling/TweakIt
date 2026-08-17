@@ -51,7 +51,7 @@ public enum TweakPanel {
             tabs: tabs,
             buttonAlignment: .bottomLeading,
             buttonInset: 16,
-            buttonIgnoresSafeArea: false,
+            buttonIgnoresSafeAreaEdges: [],
             buttonBottomOffset: buttonBottomOffset,
             buttonInitiallyVisible: buttonInitiallyVisible,
             shakeToToggleButton: shakeToToggleButton,
@@ -77,9 +77,16 @@ public enum TweakPanel {
     ///   - tabs: Optional custom tabs to show alongside the tweaks browser.
     ///   - buttonAlignment: Corner the button is pinned to. Default `.bottomLeading`.
     ///   - buttonInset: Distance from the container's edges. Default `16`.
-    ///   - buttonIgnoresSafeArea: When `true`, `buttonInset` is measured from
-    ///     the physical screen edge instead of the safe area — needed to line
-    ///     the button up with other corner-anchored chrome. Default `false`.
+    ///   - buttonIgnoresSafeAreaEdges: Edges on which `buttonInset` is measured
+    ///     from the physical screen edge instead of the safe area. Useful when
+    ///     the button needs to clear the home indicator on the bottom edge
+    ///     while still lining up horizontally with other safe-area-relative
+    ///     chrome — e.g. `.bottom`, so the button sits flush with the physical
+    ///     bottom but stays inset from the sides by the same amount as content
+    ///     that respects the safe area (this matters in landscape, where the
+    ///     notch/Dynamic Island adds a horizontal safe-area inset that a
+    ///     safe-area-relative sibling honors). Default `[]` (respect the safe
+    ///     area on every edge).
     ///   - buttonInitiallyVisible: Whether the floating button starts visible. Defaults to `true`.
     ///   - shakeToToggleButton: Whether shaking the device toggles button visibility. Defaults to `true`.
     ///   - onDismiss: Optional closure called when the panel is dismissed.
@@ -99,7 +106,7 @@ public enum TweakPanel {
         tabs: [TweakTab] = [],
         buttonAlignment: Alignment = .bottomLeading,
         buttonInset: CGFloat = 16,
-        buttonIgnoresSafeArea: Bool = false,
+        buttonIgnoresSafeAreaEdges: Edge.Set = [],
         buttonInitiallyVisible: Bool = true,
         shakeToToggleButton: Bool = true,
         onDismiss: (() -> Void)? = nil,
@@ -110,7 +117,7 @@ public enum TweakPanel {
             tabs: tabs,
             buttonAlignment: buttonAlignment,
             buttonInset: buttonInset,
-            buttonIgnoresSafeArea: buttonIgnoresSafeArea,
+            buttonIgnoresSafeAreaEdges: buttonIgnoresSafeAreaEdges,
             buttonBottomOffset: 0,
             buttonInitiallyVisible: buttonInitiallyVisible,
             shakeToToggleButton: shakeToToggleButton,
@@ -134,7 +141,7 @@ public enum TweakPanel {
         tabs: [TweakTab],
         buttonAlignment: Alignment,
         buttonInset: CGFloat,
-        buttonIgnoresSafeArea: Bool,
+        buttonIgnoresSafeAreaEdges: Edge.Set,
         buttonBottomOffset: CGFloat,
         buttonInitiallyVisible: Bool,
         shakeToToggleButton: Bool,
@@ -148,7 +155,7 @@ public enum TweakPanel {
             tabs: tabs,
             buttonAlignment: buttonAlignment,
             buttonInset: buttonInset,
-            buttonIgnoresSafeArea: buttonIgnoresSafeArea,
+            buttonIgnoresSafeAreaEdges: buttonIgnoresSafeAreaEdges,
             buttonContent: { present in AnyView(button(present)) },
             buttonInitiallyVisible: buttonInitiallyVisible,
             buttonBottomOffset: buttonBottomOffset,
