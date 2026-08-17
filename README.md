@@ -23,7 +23,7 @@ TweakIt lets you define tweakable parameters once and get a full debug panel for
 - **Swipe to reset** — Changed a value? Swipe any row to snap it back to its default.
 - **Modification tracking** — Orange dots show what you've changed at a glance.
 - **Custom tabs** — Add your own SwiftUI views alongside the built-in tweaks browser.
-- **Floating button + gesture** — Tap the button or two-finger double-tap anywhere to open.
+- **Floating button + gesture** — Tap the button or two-finger double-tap anywhere to open. Bring your own button if the default circle doesn't match your app.
 - **Section master toggles** — Enable/disable entire feature flag groups with one switch.
 - **Release-safe by default** — When disabled, all APIs no-op and `TweakRef` returns defaults directly. Active in `DEBUG` builds automatically, or opt-in for any build config with one line: `TweakIt.isEnabled = true`.
 
@@ -116,6 +116,32 @@ TweakPanel.install(
     ]
 )
 ```
+
+## Custom Button
+
+Don't want a floating gray circle that clashes with your app? Supply your own button:
+
+```swift
+TweakPanel.install(
+    store: AppTweaks.store,
+    buttonAlignment: .bottomLeading,
+    buttonInset: 24,
+    buttonIgnoresSafeArea: true
+) { present in
+    Button(action: present) {
+        Image(systemName: "slider.vertical.3")
+            .font(.system(size: 17, weight: .medium))
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .background(.thinMaterial, in: Circle())
+}
+```
+
+TweakIt still owns the window, visibility, and shake-to-toggle — you just style and place the button. One catch: whatever view you return is exactly the tappable region, so size it to the control with `.frame`/`.contentShape` rather than padding around it, or you'll get an invisible dead zone that eats touches.
+
+Don't want a button at all? Pass `{ _ in EmptyView() }` and call `TweakPanel.present()` from your own UI.
 
 ## Shake to Toggle
 

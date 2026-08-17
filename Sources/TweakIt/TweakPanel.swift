@@ -69,7 +69,7 @@ public enum TweakPanel {
     /// supplies only appearance and placement, so the button can match the
     /// app's own design system.
     ///
-    /// Pass `EmptyView()` to suppress the button entirely and drive
+    /// Pass `{ _ in EmptyView() }` to suppress the button entirely and drive
     /// ``present(selectingTab:)`` yourself.
     ///
     /// - Parameters:
@@ -84,6 +84,15 @@ public enum TweakPanel {
     ///   - shakeToToggleButton: Whether shaking the device toggles button visibility. Defaults to `true`.
     ///   - onDismiss: Optional closure called when the panel is dismissed.
     ///   - button: Builds the button. The closure it receives presents the panel.
+    ///     The returned view's frame becomes the tappable region — the
+    ///     pass-through window claims exactly that frame for touches, so keep
+    ///     it tight to the visible control (size it with `.frame(...)`/
+    ///     `.contentShape(...)` on the control itself) rather than adding
+    ///     outer padding, or the padding becomes a dead zone that swallows
+    ///     touches before they reach your app. The closure is invoked exactly
+    ///     once, at setup — the manager builds and holds the erased view then,
+    ///     so it won't re-run on state changes; back any dynamic appearance
+    ///     with `@ObservedObject`/`@State` inside the returned view instead.
     @available(iOS 16.0, *)
     public static func install<Button: View>(
         store: TweakStore,

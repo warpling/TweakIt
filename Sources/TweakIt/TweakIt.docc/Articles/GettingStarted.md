@@ -52,7 +52,7 @@ See <doc:DefiningTweaks> for the full DSL reference.
 
 ## Install the Panel
 
-Call ``TweakPanel/install(store:tabs:buttonIcon:buttonInitiallyVisible:onDismiss:)`` once during app launch:
+Call ``TweakPanel/install(store:tabs:buttonIcon:buttonInitiallyVisible:buttonBottomOffset:shakeToToggleButton:onDismiss:)`` once during app launch:
 
 ```swift
 #if DEBUG
