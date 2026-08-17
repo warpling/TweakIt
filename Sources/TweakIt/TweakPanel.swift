@@ -46,12 +46,101 @@ public enum TweakPanel {
         shakeToToggleButton: Bool = true,
         onDismiss: (() -> Void)? = nil
     ) {
+        install(
+            store: store,
+            tabs: tabs,
+            buttonAlignment: .bottomLeading,
+            buttonInset: 16,
+            buttonIgnoresSafeArea: false,
+            buttonBottomOffset: buttonBottomOffset,
+            buttonInitiallyVisible: buttonInitiallyVisible,
+            shakeToToggleButton: shakeToToggleButton,
+            onDismiss: onDismiss,
+            button: { present in
+                TweakPanelFloatingButton(icon: buttonIcon, action: present)
+            }
+        )
+    }
+
+    /// Installs the tweak panel with a host-supplied toggle button.
+    ///
+    /// The package keeps ownership of the pass-through window, the button's
+    /// visibility state, shake-to-toggle and panel presentation; the host
+    /// supplies only appearance and placement, so the button can match the
+    /// app's own design system.
+    ///
+    /// Pass `EmptyView()` to suppress the button entirely and drive
+    /// ``present(selectingTab:)`` yourself.
+    ///
+    /// - Parameters:
+    ///   - store: The `TweakStore` containing all tweak definitions.
+    ///   - tabs: Optional custom tabs to show alongside the tweaks browser.
+    ///   - buttonAlignment: Corner the button is pinned to. Default `.bottomLeading`.
+    ///   - buttonInset: Distance from the container's edges. Default `16`.
+    ///   - buttonIgnoresSafeArea: When `true`, `buttonInset` is measured from
+    ///     the physical screen edge instead of the safe area — needed to line
+    ///     the button up with other corner-anchored chrome. Default `false`.
+    ///   - buttonInitiallyVisible: Whether the floating button starts visible. Defaults to `true`.
+    ///   - shakeToToggleButton: Whether shaking the device toggles button visibility. Defaults to `true`.
+    ///   - onDismiss: Optional closure called when the panel is dismissed.
+    ///   - button: Builds the button. The closure it receives presents the panel.
+    @available(iOS 16.0, *)
+    public static func install<Button: View>(
+        store: TweakStore,
+        tabs: [TweakTab] = [],
+        buttonAlignment: Alignment = .bottomLeading,
+        buttonInset: CGFloat = 16,
+        buttonIgnoresSafeArea: Bool = false,
+        buttonInitiallyVisible: Bool = true,
+        shakeToToggleButton: Bool = true,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder button: @escaping (@escaping () -> Void) -> Button
+    ) {
+        install(
+            store: store,
+            tabs: tabs,
+            buttonAlignment: buttonAlignment,
+            buttonInset: buttonInset,
+            buttonIgnoresSafeArea: buttonIgnoresSafeArea,
+            buttonBottomOffset: 0,
+            buttonInitiallyVisible: buttonInitiallyVisible,
+            shakeToToggleButton: shakeToToggleButton,
+            onDismiss: onDismiss,
+            button: button
+        )
+    }
+
+    /// Shared implementation behind both public `install` overloads.
+    ///
+    /// `buttonBottomOffset` is internal-only — it exists solely so the legacy
+    /// `install(store:tabs:buttonIcon:buttonInitiallyVisible:buttonBottomOffset:shakeToToggleButton:onDismiss:)`
+    /// overload can keep its old layout. It's threaded to
+    /// `TweakPanelButtonContainer`'s `bottomOffset`, applied on the container
+    /// after `buttonInset` rather than inside `button`'s content, so it
+    /// doesn't inflate the frame `reportButtonFrame()` reports for hit
+    /// testing.
+    @available(iOS 16.0, *)
+    private static func install<Button: View>(
+        store: TweakStore,
+        tabs: [TweakTab],
+        buttonAlignment: Alignment,
+        buttonInset: CGFloat,
+        buttonIgnoresSafeArea: Bool,
+        buttonBottomOffset: CGFloat,
+        buttonInitiallyVisible: Bool,
+        shakeToToggleButton: Bool,
+        onDismiss: (() -> Void)?,
+        @ViewBuilder button: @escaping (@escaping () -> Void) -> Button
+    ) {
         guard TweakIt.isEnabled else { return }
 
         let manager = TweakPanelWindowManager(
             store: store,
             tabs: tabs,
-            buttonIcon: buttonIcon,
+            buttonAlignment: buttonAlignment,
+            buttonInset: buttonInset,
+            buttonIgnoresSafeArea: buttonIgnoresSafeArea,
+            buttonContent: { present in AnyView(button(present)) },
             buttonInitiallyVisible: buttonInitiallyVisible,
             buttonBottomOffset: buttonBottomOffset,
             shakeToToggleButton: shakeToToggleButton,

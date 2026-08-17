@@ -23,13 +23,21 @@ struct TweakItExampleApp: App {
                     TweakTab("Voronoi", icon: "hexagon") { ShaderTabView(categoryName: "Voronoi") },
                     TweakTab("Actions", icon: "bolt.fill") { ActionsTabView() },
                 ],
-                buttonIcon: "gearshape",
+                buttonAlignment: .bottomTrailing,
+                buttonInset: 24,
                 buttonInitiallyVisible: useFloating,
-                buttonBottomOffset: 60,
                 onDismiss: {
                     print("✅ TweakPanel onDismiss fired")
                 }
-            )
+            ) { present in
+                Button(action: present) {
+                    Image(systemName: "wrench.and.screwdriver.fill")
+                        .font(.system(size: 17, weight: .medium))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
         }
     }
 

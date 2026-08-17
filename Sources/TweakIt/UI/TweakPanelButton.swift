@@ -37,43 +37,62 @@ private struct ButtonFrameKey: PreferenceKey {
     }
 }
 
-/// Container view that hosts the floating button with glass transitions on iOS 26+.
+/// Container view that hosts the floating toggle button with glass
+/// transitions on iOS 26+. The content is supplied by the host app so it can
+/// match its own design system; `TweakPanel.install` passes the built-in
+/// button when the host doesn't provide one.
 @available(iOS 16.0, *)
-struct TweakPanelButtonContainer: View {
+struct TweakPanelButtonContainer<Content: View>: View {
     @ObservedObject var state: TweakPanelButtonState
-    let icon: String
-    let bottomOffset: CGFloat
-    let action: () -> Void
+    let alignment: Alignment
+    let inset: CGFloat
+    let ignoresSafeArea: Bool
+    /// Extra bottom padding applied on the container, after `inset` — kept
+    /// internal for the legacy `install` overload's `buttonBottomOffset`.
+    /// Applied here (not inside `content`) so it doesn't shrink the reported
+    /// hit-testing frame from `reportButtonFrame()`.
+    var bottomOffset: CGFloat = 0
+    @ViewBuilder let content: () -> Content
 
     var body: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer {
-                if state.isVisible {
-                    TweakPanelFloatingButton(icon: icon, action: action)
-                        .glassEffectID("tweakItButton", in: glassNamespace)
-                        .reportButtonFrame()
+        Group {
+            if #available(iOS 26.0, *) {
+                GlassEffectContainer {
+                    if state.isVisible {
+                        content()
+                            .glassEffectID("tweakItButton", in: glassNamespace)
+                            .reportButtonFrame()
+                    }
+                }
+            } else {
+                Group {
+                    if state.isVisible {
+                        content()
+                            .transition(.scale.combined(with: .opacity))
+                            .reportButtonFrame()
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-            .padding(16)
-            .padding(.bottom, bottomOffset)
-            .onPreferenceChange(ButtonFrameKey.self) { state.buttonFrame = $0 }
-        } else {
-            Group {
-                if state.isVisible {
-                    TweakPanelFloatingButton(icon: icon, action: action)
-                        .transition(.scale.combined(with: .opacity))
-                        .reportButtonFrame()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-            .padding(16)
-            .padding(.bottom, bottomOffset)
-            .onPreferenceChange(ButtonFrameKey.self) { state.buttonFrame = $0 }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+        .padding(inset)
+        .padding(.bottom, bottomOffset)
+        .modifier(IgnoreSafeAreaIf(active: ignoresSafeArea))
+        .onPreferenceChange(ButtonFrameKey.self) { state.buttonFrame = $0 }
     }
 
     @Namespace private var glassNamespace
+}
+
+/// `.ignoresSafeArea()` isn't conditionally applicable inline without
+/// changing the view's type, so it's wrapped in a modifier.
+@available(iOS 16.0, *)
+private struct IgnoreSafeAreaIf: ViewModifier {
+    let active: Bool
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if active { content.ignoresSafeArea() } else { content }
+    }
 }
 
 @available(iOS 16.0, *)

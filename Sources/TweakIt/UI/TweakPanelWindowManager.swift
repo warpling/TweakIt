@@ -16,7 +16,15 @@ final class TweakPanelWindowManager: NSObject {
     let store: TweakStore
     let tabs: [TweakTab]
     let onDismiss: (() -> Void)?
-    let buttonIcon: String
+    let buttonAlignment: Alignment
+    let buttonInset: CGFloat
+    let buttonIgnoresSafeArea: Bool
+    /// Type-erased because the manager is a stored, non-generic object; the
+    /// generic parameter is erased once, here, rather than at every call site.
+    let buttonContent: (@escaping () -> Void) -> AnyView
+    /// Extra bottom padding for the legacy `install` overload's
+    /// `buttonBottomOffset`. Applied on the container, not inside
+    /// `buttonContent`, so it doesn't distort the reported hit-testing frame.
     let buttonBottomOffset: CGFloat
     let shakeToToggleButton: Bool
 
@@ -30,15 +38,21 @@ final class TweakPanelWindowManager: NSObject {
     init(
         store: TweakStore,
         tabs: [TweakTab],
-        buttonIcon: String,
+        buttonAlignment: Alignment,
+        buttonInset: CGFloat,
+        buttonIgnoresSafeArea: Bool,
+        buttonContent: @escaping (@escaping () -> Void) -> AnyView,
         buttonInitiallyVisible: Bool,
-        buttonBottomOffset: CGFloat,
+        buttonBottomOffset: CGFloat = 0,
         shakeToToggleButton: Bool,
         onDismiss: (() -> Void)?
     ) {
         self.store = store
         self.tabs = tabs
-        self.buttonIcon = buttonIcon
+        self.buttonAlignment = buttonAlignment
+        self.buttonInset = buttonInset
+        self.buttonIgnoresSafeArea = buttonIgnoresSafeArea
+        self.buttonContent = buttonContent
         self.buttonBottomOffset = buttonBottomOffset
         self.shakeToToggleButton = shakeToToggleButton
         self.onDismiss = onDismiss
@@ -78,9 +92,17 @@ final class TweakPanelWindowManager: NSObject {
         btnWin.backgroundColor = .clear
         btnWin.buttonState = buttonState
 
-        let container = TweakPanelButtonContainer(state: buttonState, icon: buttonIcon, bottomOffset: buttonBottomOffset) { [weak self] in
+        let content = buttonContent { [weak self] in
             self?.presentPanel()
         }
+        let container = TweakPanelButtonContainer(
+            state: buttonState,
+            alignment: buttonAlignment,
+            inset: buttonInset,
+            ignoresSafeArea: buttonIgnoresSafeArea,
+            bottomOffset: buttonBottomOffset,
+            content: { content }
+        )
         let hostingController = UIHostingController(rootView: container)
         hostingController.view.backgroundColor = .clear
         hostingController.view.isOpaque = false
