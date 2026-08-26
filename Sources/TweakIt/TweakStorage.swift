@@ -115,6 +115,12 @@ public final class TweakStorage: ObservableObject {
             var mutableKeys = keys
             mutableKeys.insert(key)
             modifiedKeys = mutableKeys
+        } else {
+            // The modifiedKeys setter (above) publishes for first-time
+            // modifications; value-only changes to an already-modified key
+            // must publish too, or observers never hear the second change
+            // to the same tweak.
+            objectWillChange.send()
         }
     }
 
