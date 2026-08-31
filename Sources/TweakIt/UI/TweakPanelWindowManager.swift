@@ -140,7 +140,14 @@ final class TweakPanelWindowManager: NSObject {
     /// Presents the tweak panel as a sheet.
     func presentPanel(selectingTab tabName: String? = nil) {
         guard let panelWindow, let rootVC = panelWindow.rootViewController else { return }
-        if rootVC.presentedViewController != nil { return }
+        if rootVC.presentedViewController != nil {
+            // The sheet is already up. If its window somehow got hidden while
+            // it was still presented, the panel is invisible AND unreachable
+            // (this early return would fire forever) — so unhide rather than
+            // bail, and the panel can always be recovered.
+            panelWindow.isHidden = false
+            return
+        }
 
         // Write tab selection to UserDefaults BEFORE creating the view,
         // so @AppStorage("TweakIt.lastTab") initializes with the correct value.
@@ -177,6 +184,9 @@ final class TweakPanelWindowManager: NSObject {
 /// `@Environment(\.dismiss)`. UIKit routes all of these through the presenting
 /// VC's `dismiss` method, unlike `presentationControllerDidDismiss` which only
 /// fires for interactive dismissals.
+///
+/// The catch is that UIKit routes ATTEMPTED dismissals through here as well,
+/// so the completion has to check that the sheet actually went away.
 private class PanelRootViewController: UIViewController {
     var onDismissCompletion: (() -> Void)?
 
@@ -184,9 +194,16 @@ private class PanelRootViewController: UIViewController {
         let hadPresented = presentedViewController != nil
         super.dismiss(animated: flag) { [weak self] in
             completion?()
-            if hadPresented {
-                self?.onDismissCompletion?()
-            }
+            // Only tear down when the sheet is REALLY gone. UIKit runs this
+            // completion for a CANCELLED interactive dismissal too — drag the
+            // sheet down and let go, and if it springs back to a detent
+            // instead of dismissing, the completion still fires with the
+            // sheet very much on screen. Acting on that hid the panel window
+            // out from under a live sheet: everything vanished, and because
+            // `presentedViewController` was still set, nothing could bring it
+            // back.
+            guard hadPresented, let self, self.presentedViewController == nil else { return }
+            self.onDismissCompletion?()
         }
     }
 }
