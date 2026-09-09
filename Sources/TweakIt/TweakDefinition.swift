@@ -303,6 +303,22 @@ public struct TweakDefinitionBuilder {
         component
     }
 
+    /// Source-compatibility shim for consumers who wrote their own 
+    /// function returning .
+    ///
+    /// The builder's component type widened to  in 1.1 so a section can hold
+    /// named TweakGroups. Overloading  on its return type lets Swift pick the
+    /// flattened form from the contextual type, so those functions keep compiling untouched —
+    /// nested groups simply flatten into the definition list, which is what a caller asking for
+    ///  wanted anyway.
+    public static func buildFinalResult(_ items: [TweakSectionItem]) -> [TweakDefinition] {
+        items.flatMap(\.definitions)
+    }
+
+    public static func buildFinalResult(_ items: [TweakSectionItem]) -> [TweakSectionItem] {
+        items
+    }
+
     public static func buildArray(_ components: [[TweakSectionItem]]) -> [TweakSectionItem] {
         components.flatMap { $0 }
     }
