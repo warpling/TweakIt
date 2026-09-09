@@ -34,6 +34,13 @@ public final class TweakStore {
     /// Lookup table: full key path → TweakMetadata.
     private let tweaksByKey: [String: TweakMetadata]
 
+    /// Lookup table: full key path → the section metadata that owns it.
+    ///
+    /// Built during `init` rather than derived by splitting the key: section and category
+    /// names may contain dots and spaces ("Modal Cards", "v1.2 Flags"), so a key is not
+    /// structurally parseable back into its parts.
+    private let sectionsByKey: [String: TweakSectionMetadata]
+
     /// Lookup table: full key path → default value (typed as Any).
     private let defaultsByKey: [String: Any]
 
@@ -50,42 +57,76 @@ public final class TweakStore {
         let defs = categories()
         var allTweaks = [String: TweakMetadata]()
         var allDefaults = [String: Any]()
+        var allSections = [String: TweakSectionMetadata]()
         var builtCategories = [TweakCategoryMetadata]()
+
+        /// Builds one tweak's metadata. The group a tweak was declared in deliberately
+        /// plays no part in its key — see `TweakGroup`.
+        func makeMetadata(_ tweak: TweakDefinition, sectionPrefix: String) -> TweakMetadata {
+            let key = "\(sectionPrefix).\(tweak.name)"
+            let metadata: TweakMetadata
+            if let action = tweak.action {
+                metadata = TweakMetadata(id: key, name: tweak.name, action: action, description: tweak.description)
+            } else {
+                metadata = TweakMetadata(
+                    id: key,
+                    name: tweak.name,
+                    defaultValue: tweak.defaultValue,
+                    range: tweak.range,
+                    options: tweak.options,
+                    description: tweak.description
+                )
+            }
+            allTweaks[key] = metadata
+            allDefaults[key] = tweak.defaultValue
+            return metadata
+        }
 
         for category in defs {
             var builtSections = [TweakSectionMetadata]()
 
             for section in category.sections {
                 let sectionPrefix = "\(category.name).\(section.name)"
-                var builtTweaks = [TweakMetadata]()
+                var builtGroups = [TweakGroupMetadata]()
+                var pendingUngrouped = [TweakMetadata]()
 
-                for tweak in section.tweaks {
-                    let key = "\(sectionPrefix).\(tweak.name)"
-                    let metadata: TweakMetadata
-                    if let action = tweak.action {
-                        metadata = TweakMetadata(id: key, name: tweak.name, action: action)
-                    } else {
-                        metadata = TweakMetadata(
-                            id: key,
-                            name: tweak.name,
-                            defaultValue: tweak.defaultValue,
-                            range: tweak.range,
-                            options: tweak.options
-                        )
-                    }
-                    builtTweaks.append(metadata)
-                    allTweaks[key] = metadata
-                    allDefaults[key] = tweak.defaultValue
+                func flushUngrouped() {
+                    guard !pendingUngrouped.isEmpty else { return }
+                    builtGroups.append(TweakGroupMetadata(
+                        id: "\(sectionPrefix)#\(builtGroups.count)",
+                        name: nil,
+                        tweaks: pendingUngrouped
+                    ))
+                    pendingUngrouped = []
                 }
 
-                builtSections.append(TweakSectionMetadata(
+                for item in section.items {
+                    switch item {
+                    case .tweak(let tweak):
+                        pendingUngrouped.append(makeMetadata(tweak, sectionPrefix: sectionPrefix))
+                    case .group(let group):
+                        flushUngrouped()
+                        builtGroups.append(TweakGroupMetadata(
+                            id: "\(sectionPrefix)#\(builtGroups.count)",
+                            name: group.name,
+                            tweaks: group.tweaks.map { makeMetadata($0, sectionPrefix: sectionPrefix) }
+                        ))
+                    }
+                }
+                flushUngrouped()
+
+                let sectionMetadata = TweakSectionMetadata(
                     id: sectionPrefix,
                     name: section.name,
-                    tweaks: builtTweaks,
+                    groups: builtGroups,
                     hasMasterToggle: section.hasMasterToggle,
                     tag: section.tag,
                     color: section.color
-                ))
+                )
+                for tweak in sectionMetadata.tweaks {
+                    allSections[tweak.id] = sectionMetadata
+                }
+                builtSections.append(sectionMetadata)
             }
 
             builtCategories.append(TweakCategoryMetadata(
@@ -98,6 +139,7 @@ public final class TweakStore {
 
         self.categories = builtCategories
         self.tweaksByKey = allTweaks
+        self.sectionsByKey = allSections
         self.defaultsByKey = allDefaults
     }
 
@@ -149,6 +191,26 @@ public final class TweakStore {
     /// ```
     public func ref<T: Equatable>(_ key: String) -> TweakRef<T> {
         ref(key, as: T.self)
+    }
+
+    // MARK: - Lookups
+
+    /// Looks up a tweak's metadata by its full key path.
+    ///
+    /// Returns `nil` for a key with no definition in this store — which is the expected
+    /// outcome for a *ghost key*: one persisted by pins or recents whose tweak has since
+    /// been renamed or deleted. Callers holding stored keys should filter through this
+    /// and skip the misses rather than assume a definition exists.
+    public func tweak(forKey key: String) -> TweakMetadata? {
+        tweaksByKey[key]
+    }
+
+    /// Looks up the section that declares the given tweak key.
+    ///
+    /// Backed by a dictionary built at init, not by parsing the key — section names
+    /// routinely contain spaces and may contain dots. Returns `nil` for a ghost key.
+    public func section(containing key: String) -> TweakSectionMetadata? {
+        sectionsByKey[key]
     }
 
     // MARK: - Section Queries

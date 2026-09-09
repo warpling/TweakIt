@@ -20,7 +20,9 @@ TweakIt lets you define tweakable parameters once and get a full debug panel for
 
 - **Declarative DSL** — Define tweaks with result builders. Types infer the controls automatically.
 - **Real-time editing** — Sliders, toggles, text fields, pickers, steppers, and action buttons.
-- **Swipe to reset** — Changed a value? Swipe any row to snap it back to its default.
+- **Swipe to reset** — Changed a value? Swipe left on any row to snap it back to its default.
+- **Groups & descriptions** — Sub-headings inside a section, plus a one-line gloss under any cryptic name.
+- **Quick Access** — Pin tweaks (swipe right) and they float to the top of the panel, live and editable.
 - **Modification tracking** — Orange dots show what you've changed at a glance.
 - **Custom tabs** — Add your own SwiftUI views alongside the built-in tweaks browser.
 - **Floating button + gesture** — Tap the button or two-finger double-tap anywhere to open. Bring your own button if the default circle doesn't match your app.
@@ -86,6 +88,43 @@ The control is inferred from your default value and parameters:
 | `TweakDefinition("reset", action: { ... })` | Action button |
 
 Action buttons don't store a value — they fire a closure on tap. Great for debug shortcuts like resetting state or clearing caches.
+
+## Groups & Descriptions
+
+A section that grew past a dozen tweaks stops being scannable. `TweakGroup` gives it sub-headings, and `description:` gives any tweak a one-line gloss — because `ignoreEngagedFloor` means nothing six months later:
+
+```swift
+TweakSection("Modal Cards") {
+    TweakDefinition("enabled", default: true)
+
+    TweakGroup("Shape") {
+        TweakDefinition("cornerRadius", default: 12.0, range: 0...40)
+        TweakDefinition("shadowRadius", default: 8.0, range: 0...40,
+                        description: "blur radius, not the offset")
+    }
+
+    TweakGroup("Physics") {
+        TweakDefinition("gravity", default: 1.0, range: 0...4)
+    }
+}
+```
+
+Each group renders as its own headed block in the panel. Tweaks declared bare — like `enabled` above — form an implicit headerless run, so you can interleave loose tweaks and groups in whatever order reads best.
+
+**A group name is not part of the storage key.** `"Visual.Modal Cards.cornerRadius"` is the key whether or not `cornerRadius` sits in a group, so you can tidy up an existing section without resetting values anyone has dialled in on a device.
+
+Descriptions render as small monospaced secondary text under the name — a phrase, not a paragraph. A tweak without one looks exactly as it always did; nothing reserves empty space.
+
+## Quick Access
+
+Hunting three levels down for the one slider you're iterating on gets old fast. The top of the panel holds a **Quick Access** section: tweaks you've pinned, followed by ones you've recently edited.
+
+- **Swipe right on any row to pin or unpin it.** (Swipe left is still reset.)
+- The rows are the real controls, not shortcuts — drag the slider right there without opening its section.
+- A small monospaced breadcrumb under each row says where it actually lives (`Visual · Modal Cards`).
+- Pins are yours and persist; recents are the last few keys you touched and look after themselves.
+
+Nothing to configure — the section appears once there's something to put in it, and hides while you're searching.
 
 ## TweakRef — Typed Handles
 
@@ -161,6 +200,14 @@ You can then toggle the button programmatically via `TweakPanel.buttonState`:
 // In your own shake handler or gesture recognizer:
 TweakPanel.buttonState?.toggle()
 ```
+
+## Upgrading from 1.0
+
+Nothing to change in your code — the DSL, keys, and stored values are all unchanged. Three things look different in the panel:
+
+- **Categories now start collapsed.** Expanding one is remembered across launches, so the category you're working in stays open. (The old "collapsed categories" preference is discarded rather than migrated — carrying it over would have restored exactly the everything-expanded state this replaces.)
+- **A Quick Access section appears at the top** once you've pinned or edited something.
+- **The panel follows the system appearance** instead of forcing dark. It used to force a dark SwiftUI environment inside a sheet whose chrome kept following the system, which on a light-mode device meant white text on light glass.
 
 ## Installation
 

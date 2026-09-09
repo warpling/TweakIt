@@ -33,6 +33,13 @@ private class DisablePopGestureVC: UIViewController {
 ///
 /// When custom tabs are provided, shows a segmented picker at the top.
 /// When no tabs are provided, shows just the tweaks browser.
+///
+/// - Note: The panel follows the system appearance and every colour in it is semantic. It used to
+///   force `.preferredColorScheme(.dark)`, which only darkened the SwiftUI environment — the sheet
+///   chrome around it is UIKit (Liquid Glass on iOS 26) and kept following the system, so a
+///   light-mode device got white text on light glass. Don't reintroduce that, and don't "fix" it
+///   from the other end with `overrideUserInterfaceStyle` on the hosting controller either: a debug
+///   panel has no business overriding the user's appearance setting.
 @available(iOS 16.0, *)
 struct TweakPanelView: View {
     let store: TweakStore
@@ -109,6 +116,5 @@ struct TweakPanelView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 }

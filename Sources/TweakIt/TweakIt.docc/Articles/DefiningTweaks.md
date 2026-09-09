@@ -12,11 +12,13 @@ Tweaks are organized in a three-level hierarchy: **categories** contain **sectio
 TweakStore
  └─ TweakCategory("Visual", icon: "eye")
      └─ TweakSection("Animations")
-         ├─ TweakDefinition("duration", default: 0.46, range: 0.1...2.0)
-         └─ TweakDefinition("enabled", default: true)
+         ├─ TweakDefinition("enabled", default: true)
+         └─ TweakGroup("Spring")
+             ├─ TweakDefinition("duration", default: 0.46, range: 0.1...2.0)
+             └─ TweakDefinition("damping", default: 0.8, range: 0.1...1.0)
 ```
 
-Key paths follow the pattern `Category.Section.name` — for example, `"Visual.Animations.duration"`.
+Key paths follow the pattern `Category.Section.name` — for example, `"Visual.Animations.duration"`. ``TweakGroup`` is a fourth, purely visual level: it adds a sub-heading in the panel and contributes nothing to the key.
 
 ## Control Types
 
@@ -100,6 +102,49 @@ if AppTweaks.store.isSectionEnabled("Debug.Feature Flags") {
     // section is enabled
 }
 ```
+
+### Groups
+
+A long section stops being scannable somewhere around a dozen rows. ``TweakGroup`` breaks it up with sub-headings, replacing the `// — Shape —` source comments the panel could never see:
+
+```swift
+TweakSection("Modal Cards") {
+    TweakDefinition("enabled", default: true)
+
+    TweakGroup("Shape") {
+        TweakDefinition("cornerRadius", default: 12.0, range: 0...40)
+        TweakDefinition("shadowRadius", default: 8.0, range: 0...40)
+    }
+
+    TweakGroup("Physics") {
+        TweakDefinition("gravity", default: 1.0, range: 0...4)
+    }
+}
+```
+
+Each group becomes its own headed block in the panel, in declaration order. Tweaks declared bare — `enabled` above — form an implicit *ungrouped run* that renders with no heading at all, and a section can hold several of them interleaved with groups, so loose tweaks can sit both above and below a group.
+
+Two things worth knowing:
+
+- **The group name is not part of the storage key.** `cornerRadius` is `"Visual.Modal Cards.cornerRadius"` whether or not it sits in a group, so grouping an existing section never resets values already dialled in on a device.
+- **Groups don't nest.** A ``TweakGroup`` declared inside another is flattened into its parent rather than producing a second level of heading.
+
+Reading the structure back, ``TweakSectionMetadata/groups`` gives the declared shape (with `nil` names for the ungrouped runs), while ``TweakSectionMetadata/tweaks`` stays a flat list across all of them.
+
+### Descriptions
+
+Every ``TweakDefinition`` initializer takes a trailing `description:` — a one-line gloss shown under the name in small monospaced text:
+
+```swift
+TweakSection("Sharing") {
+    TweakDefinition("ignoreEngagedFloor", default: false,
+                    description: "skip the 3-solve minimum before the share prompt")
+    TweakDefinition("rewardDrip", default: 2, range: 1...10,
+                    description: "shares between reward reveals")
+}
+```
+
+Use it when the name alone won't survive six months. Keep it to a phrase — the panel renders it as a caption, not a paragraph. A tweak without a description renders exactly as it did before descriptions existed.
 
 ### Metadata
 
