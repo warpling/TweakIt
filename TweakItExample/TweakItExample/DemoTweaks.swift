@@ -45,12 +45,23 @@ enum DemoTweaks {
                 TweakDefinition("speed", default: 1.0, range: 0.0...5.0)
                 TweakDefinition("scale", default: 3.0, range: 0.5...10.0)
             }
+            // Groups and descriptions. Note the keys are untouched by the grouping —
+            // "Plasma.Color.saturation" reads the same whether or not it sits in a group.
             TweakSection("Color") {
-                TweakDefinition("waveCount", default: 4, range: 1.0...8.0)
-                TweakDefinition("distortion", default: 0.5, range: 0.0...2.0)
-                TweakDefinition("saturation", default: 0.7, range: 0.0...1.0)
-                TweakDefinition("brightness", default: 0.5, range: 0.0...1.0)
-                TweakDefinition("palette", default: "neon", options: ["lava", "ocean", "neon", "pastel", "mono"])
+                TweakDefinition("waveCount", default: 4, range: 1.0...8.0,
+                                description: "interfering waves summed per pixel")
+
+                TweakGroup("Field") {
+                    TweakDefinition("distortion", default: 0.5, range: 0.0...2.0,
+                                    description: "warps the field before it's shaded")
+                }
+
+                TweakGroup("Palette") {
+                    TweakDefinition("saturation", default: 0.7, range: 0.0...1.0)
+                    TweakDefinition("brightness", default: 0.5, range: 0.0...1.0)
+                    TweakDefinition("palette", default: "neon", options: ["lava", "ocean", "neon", "pastel", "mono"],
+                                    description: "colour ramp the field is mapped through")
+                }
             }
         }
 
@@ -138,9 +149,17 @@ enum DemoTweaks {
         TweakCategory("Post-Processing", icon: "camera.filters") {
             TweakSection("Film Grain") {
                 TweakDefinition("enabled", default: false)
-                TweakDefinition("amount", default: 0.15, range: 0.0...0.5)
-                TweakDefinition("size", default: 1.5, range: 0.5...4.0)
-                TweakDefinition("animated", default: true)
+
+                TweakGroup("Grain") {
+                    TweakDefinition("amount", default: 0.15, range: 0.0...0.5,
+                                    description: "opacity of the grain overlay")
+                    TweakDefinition("size", default: 1.5, range: 0.5...4.0,
+                                    description: "grain cell size, in pixels")
+                }
+
+                // Back outside the group: a second unnamed run, rendered headerless under it.
+                TweakDefinition("animated", default: true,
+                                description: "resample the grain every frame")
             }
             TweakSection("Vignette") {
                 TweakDefinition("enabled", default: false)

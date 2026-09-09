@@ -99,4 +99,4 @@ storage.resetSection("Animations.Spring")
 storage.resetAll()
 ```
 
-The panel UI also supports swipe-to-reset on individual rows and a "Reset All" button per section.
+The panel UI also supports swipe-to-reset on individual rows and a "Reset All" button per section. Swiping a row the other way pins it, floating a live copy of the control into the panel's Quick Access section so you don't have to navigate back to it. Pins survive both kinds of reset — a pin says "I'm working on this", not "this is modified".
