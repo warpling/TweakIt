@@ -182,6 +182,17 @@ final class TweakStoreTests: XCTestCase {
         XCTAssertEqual(ref.value, "staging")
     }
 
+    // MARK: - Breadcrumbs
+
+    /// Precomputed at init so the panel's Quick Access section doesn't rebuild the whole map
+    /// inside a view body on every render.
+    func testBreadcrumbForSectionID() {
+        let store = makeStore()
+        XCTAssertEqual(store.breadcrumb(forSectionID: "Visual.Animations"), "Visual · Animations")
+        XCTAssertEqual(store.breadcrumb(forSectionID: "Visual.Layout"), "Visual · Layout")
+        XCTAssertNil(store.breadcrumb(forSectionID: "Gone.Section"), "A ghost section has no breadcrumb")
+    }
+
     // MARK: - Section Enabled
 
     func testSectionEnabled() {

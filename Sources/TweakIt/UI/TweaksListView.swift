@@ -47,13 +47,13 @@ public struct TweaksListView: View {
                 quickAccessSection
             }
 
-            ForEach(filteredCategories) { category in
+            ForEach(visibleCategories, id: \.category.id) { category, sections in
                 // A search forces every matching category open; otherwise it's the saved state.
                 let isExpanded = expandedCategories.contains(category.id) || !searchText.isEmpty
 
                 if isExpanded {
                     Section {
-                        ForEach(filteredSections(for: category)) { section in
+                        ForEach(sections) { section in
                             NavigationLink {
                                 TweakSectionDetailView(section: section, storage: storage)
                             } label: {
@@ -134,15 +134,6 @@ public struct TweaksListView: View {
         let keys = pinnedKeys + recentKeysSnapshot.filter { !pinned.contains($0) }
         guard !keys.isEmpty else { return [] }
 
-        // Section id → "Category · Section". A section id can't be split back into its parts —
-        // category and section names contain spaces and may contain dots — so walk the tree.
-        var breadcrumbs = [String: String]()
-        for category in store.categories {
-            for section in category.sections {
-                breadcrumbs[section.id] = "\(category.name) · \(section.name)"
-            }
-        }
-
         var entries = [QuickAccessEntry]()
         for key in keys {
             guard entries.count < Self.quickAccessLimit else { break }
@@ -157,7 +148,9 @@ public struct TweaksListView: View {
 
             entries.append(QuickAccessEntry(
                 tweak: tweak,
-                breadcrumb: breadcrumbs[section.id] ?? section.name,
+                // Precomputed by the store: a section id can't be split back into its parts —
+                // category and section names contain spaces and may contain dots.
+                breadcrumb: store.breadcrumb(forSectionID: section.id) ?? section.name,
                 isPinned: pinned.contains(key),
                 isDisabled: isDisabled
             ))
@@ -167,26 +160,34 @@ public struct TweaksListView: View {
 
     // MARK: - Filtering
 
-    private var filteredCategories: [TweakCategoryMetadata] {
-        if searchText.isEmpty {
-            return store.categories
+    /// Categories paired with the sections to show under them, resolved in one pass.
+    ///
+    /// Filtering used to run twice per category on every render — once to decide whether the
+    /// category had any matches, then again inside the `ForEach` to list them — which meant
+    /// lowercasing every tweak name and description in the store twice per keystroke.
+    private var visibleCategories: [(category: TweakCategoryMetadata, sections: [TweakSectionMetadata])] {
+        guard !searchText.isEmpty else {
+            return store.categories.map { ($0, $0.sections) }
         }
-        return store.categories.filter { category in
-            !filteredSections(for: category).isEmpty
+
+        let needle = searchText.lowercased()
+        return store.categories.compactMap { category in
+            let sections = category.sections.filter { $0.matches(needle) }
+            return sections.isEmpty ? nil : (category, sections)
         }
     }
+}
 
-    private func filteredSections(for category: TweakCategoryMetadata) -> [TweakSectionMetadata] {
-        if searchText.isEmpty {
-            return category.sections
-        }
-        let lowercased = searchText.lowercased()
-        return category.sections.filter { section in
-            section.name.lowercased().contains(lowercased) ||
-            section.tweaks.contains { tweak in
-                tweak.name.lowercased().contains(lowercased) ||
-                tweak.description?.lowercased().contains(lowercased) == true
-            }
+// MARK: - Search Matching
+
+@available(iOS 16.0, *)
+private extension TweakSectionMetadata {
+    /// Whether the section, or any tweak in it, matches an already-lowercased search string.
+    func matches(_ lowercasedNeedle: String) -> Bool {
+        if name.lowercased().contains(lowercasedNeedle) { return true }
+        return tweaks.contains { tweak in
+            tweak.name.lowercased().contains(lowercasedNeedle)
+                || tweak.description?.lowercased().contains(lowercasedNeedle) == true
         }
     }
 }
