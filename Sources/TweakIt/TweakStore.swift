@@ -44,6 +44,15 @@ public final class TweakStore {
     /// Lookup table: full key path → default value (typed as Any).
     private let defaultsByKey: [String: Any]
 
+    /// Lookup table: section id → "Category · Section", built once at init.
+    ///
+    /// The panel's Quick Access section needs a breadcrumb for every floated row, and a section
+    /// id can't be split back into its parts — category and section names contain spaces and may
+    /// contain dots — so the answer has to come from walking the tree. Walking it inside a view
+    /// body meant rebuilding a dictionary over every category and section on every render, which
+    /// during a slider drag is sixty times a second.
+    private let breadcrumbsBySectionID: [String: String]
+
     /// Creates a store from a result builder DSL definition.
     ///
     /// - Parameters:
@@ -137,10 +146,18 @@ public final class TweakStore {
             ))
         }
 
+        var allBreadcrumbs = [String: String]()
+        for category in builtCategories {
+            for section in category.sections {
+                allBreadcrumbs[section.id] = "\(category.name) · \(section.name)"
+            }
+        }
+
         self.categories = builtCategories
         self.tweaksByKey = allTweaks
         self.sectionsByKey = allSections
         self.defaultsByKey = allDefaults
+        self.breadcrumbsBySectionID = allBreadcrumbs
     }
 
     // MARK: - Subscript Access
@@ -211,6 +228,13 @@ public final class TweakStore {
     /// routinely contain spaces and may contain dots. Returns `nil` for a ghost key.
     public func section(containing key: String) -> TweakSectionMetadata? {
         sectionsByKey[key]
+    }
+
+    /// "Category · Section" for a section id, or `nil` if this store doesn't declare it.
+    ///
+    /// Precomputed at init — see `breadcrumbsBySectionID`.
+    func breadcrumb(forSectionID id: String) -> String? {
+        breadcrumbsBySectionID[id]
     }
 
     // MARK: - Section Queries
