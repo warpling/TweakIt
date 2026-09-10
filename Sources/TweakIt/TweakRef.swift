@@ -30,6 +30,10 @@ public final class TweakRef<T: Equatable> {
     }
 
     /// The current tweak value. Returns the persisted override when enabled, or the default when disabled.
+    ///
+    /// Cheap enough to read every frame — the value comes from memory, not `UserDefaults`. Still
+    /// hoist it out of an inner loop, and know that writing back a value the tweak already holds
+    /// is dropped rather than persisted. See <doc:ReadingValues>.
     public var value: T {
         get {
             guard TweakIt.isEnabled else { return defaultValue }

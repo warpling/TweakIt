@@ -142,6 +142,43 @@ AppTweaks.duration.reset()      // back to 0.46
 
 In release builds, `.value` returns the compile-time default directly — zero overhead.
 
+## Reading Tweaks in Hot Paths
+
+**Reading a tweak every frame is fine.** Values, the modified-key set, pins and recents are all
+held in memory; `UserDefaults` is written on every change and read once per key to warm the cache,
+but it is never touched on a plain read. A read costs a lock, a set lookup and a dictionary
+lookup — no `CFPreferences`, no logging, no property-list parsing.
+
+Two habits still pay off when a read sits inside a render loop:
+
+```swift
+// Hoist the read out of the inner loop — one read per frame, not one per particle.
+let radius = AppTweaks.blurRadius.value
+for particle in particles { particle.blur(radius) }
+```
+
+```swift
+// Don't write a value the tweak already holds — although if you do, TweakIt drops it:
+// an unchanged `setValue` performs no write and publishes no change.
+AppTweaks.blurRadius.value = computed
+```
+
+> **Why this is called out at all:** before 1.2.0 every read went to `UserDefaults`, and
+> `CFPreferences` `os_log`s what it returns — including the full modified-key array, stringified.
+> A consumer reading a handful of tweaks per frame spent all its time inside logging, went
+> unresponsive, and was killed by the iOS watchdog. If you're on 1.1.1 or earlier, upgrade.
+
+### Storage owns its keys
+
+`TweakStorage` is a write-through cache over `UserDefaults`, so it assumes nothing else writes the
+keys under its prefix. If something does — seeding values from a config file, wiping the
+persistent domain, a second `TweakStorage` over the same prefix — call `storage.reloadFromDisk()`
+afterwards to drop the caches and re-read. Every write made *through* storage keeps itself
+correct; this is only for writes made behind its back.
+
+Reads and writes are safe from any thread. `objectWillChange` fires on whichever thread made the
+change, so mutate from the main thread while the panel is on screen.
+
 ## Custom Tabs
 
 Add your own panels alongside the built-in tweaks browser:
@@ -200,6 +237,12 @@ You can then toggle the button programmatically via `TweakPanel.buttonState`:
 // In your own shake handler or gesture recognizer:
 TweakPanel.buttonState?.toggle()
 ```
+
+## Upgrading from 1.1
+
+Nothing to change in your code. Reads no longer touch `UserDefaults`, which makes them safe at
+frame rate — see [Reading Tweaks in Hot Paths](#reading-tweaks-in-hot-paths) for the one constraint
+that comes with it, and the new `TweakStorage.reloadFromDisk()` that resolves it.
 
 ## Upgrading from 1.0
 

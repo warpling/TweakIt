@@ -67,6 +67,51 @@ AppTweaks.duration.reset()      // revert to default
 
 In release builds, ``TweakRef/value`` returns the compile-time default directly. The compiler can inline and constant-fold the result. See <doc:ReleaseBuildSafety> for details.
 
+## Reading in a Hot Path
+
+Reading a tweak every frame is fine. ``TweakStorage`` keeps values, the modified-key set, pins and
+recents in memory: `UserDefaults` is written on every change and read once per key to warm the
+cache, but is never consulted on a plain read. A read costs a lock, a set lookup and a dictionary
+lookup.
+
+This wasn't always true, and the failure was severe. Before 1.2.0 every read reached
+`UserDefaults`, and `CFPreferences` `os_log`s the value it returns — including the whole
+modified-key array, stringified in full. An app reading a few tweaks per frame spent its time
+inside logging, stopped responding, and was killed by the iOS watchdog (`0x8BADF00D`). If you are
+on 1.1.1 or earlier, upgrade.
+
+Two habits are still worth keeping:
+
+```swift
+// Hoist the read out of the inner loop.
+let radius = AppTweaks.blurRadius.value
+for particle in particles { particle.blur(radius) }
+
+// Writing a value the tweak already holds is dropped — no write, no `objectWillChange` —
+// so a per-frame write of an unchanged value costs nothing but the comparison.
+AppTweaks.blurRadius.value = computed
+```
+
+### Storage Owns Its Keys
+
+``TweakStorage`` is a write-through cache, so it assumes it is the only writer of the keys under
+its prefix. Writing one of those keys behind its back — seeding values from a config file,
+`removePersistentDomain(forName:)`, or a second ``TweakStorage`` over the same defaults and
+prefix — is invisible to it until you call ``TweakStorage/reloadFromDisk()``:
+
+```swift
+UserDefaults.standard.set(0.9, forKey: "TweakIt.Animations.Spring.damping")
+AppTweaks.store.storage.reloadFromDisk()   // drop the caches, re-read, notify observers
+```
+
+Prefer routing the write through storage in the first place — `store["Animations.Spring.damping"] = 0.9`
+keeps the cache correct with no extra step.
+
+### Threading
+
+Every member of ``TweakStorage`` is safe to call from any thread. `objectWillChange` is sent from
+whichever thread made the change, so make changes on the main thread while the panel is on screen.
+
 ## Observing Changes
 
 ``TweakStorage`` conforms to `ObservableObject`. In SwiftUI, observe it to re-render when any tweak changes:
@@ -98,5 +143,9 @@ storage.resetSection("Animations.Spring")
 // Reset everything:
 storage.resetAll()
 ```
+
+Resetting is not the same as ``TweakStorage/reloadFromDisk()``: a reset *changes* values, dropping
+overrides so defaults apply again, while `reloadFromDisk()` changes nothing and only re-reads what
+is already on disk.
 
 The panel UI also supports swipe-to-reset on individual rows and a "Reset All" button per section. Swiping a row the other way pins it, floating a live copy of the control into the panel's Quick Access section so you don't have to navigate back to it. Pins survive both kinds of reset — a pin says "I'm working on this", not "this is modified".
