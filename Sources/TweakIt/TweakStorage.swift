@@ -35,16 +35,37 @@ public final class TweakStorage: ObservableObject {
     private let pinnedKeysKey: String
     private let recentKeysKey: String
 
+    // MARK: - Key-set caches
+    //
+    // ⚠️ These three sets are read on EVERY `value(forKey:default:)` call — which is the hot path
+    // for any consumer that reads tweaks per frame. Backing them directly with `UserDefaults` meant
+    // a `CFPreferences` lookup per tweak per read, and CFPreferences `os_log`s the value it
+    // returns: an array of every modified key, stringified in full, thousands of times a second.
+    //
+    // That was not a slow path, it was a fatal one. It burned enough CPU to make an app
+    // unresponsive and then be killed by the watchdog (`0x8BADF00D`), with the crashing stack
+    // sitting in `__CFStringCreateImmutableFunnel3` under `_os_log_fmt_flatten_NSCF` — the logging
+    // of the array, not the reading of it. Found in Blackbox, 2026-09-10.
+    //
+    // UserDefaults stays the source of truth on disk; these are a write-through cache in front of
+    // it. Safe because this type is the only writer of these keys and is main-thread-confined.
+
+    private var cachedModifiedKeys: Set<String>?
+    private var cachedPinnedKeys: [String]?
+    private var cachedRecentKeys: [String]?
+
     /// Set of keys that have been modified from their defaults.
     public private(set) var modifiedKeys: Set<String> {
         get {
-            guard let array = defaults.array(forKey: modifiedKeysKey) as? [String] else {
-                return []
-            }
-            return Set(array)
+            if let cachedModifiedKeys { return cachedModifiedKeys }
+            let value = Set(defaults.array(forKey: modifiedKeysKey) as? [String] ?? [])
+            cachedModifiedKeys = value
+            return value
         }
         set {
+            guard newValue != modifiedKeys else { return }
             objectWillChange.send()
+            cachedModifiedKeys = newValue
             defaults.set(Array(newValue), forKey: modifiedKeysKey)
         }
     }
@@ -210,10 +231,15 @@ public final class TweakStorage: ObservableObject {
     public private(set) var pinnedKeys: [String] {
         get {
             guard TweakIt.isEnabled else { return [] }
-            return defaults.stringArray(forKey: pinnedKeysKey) ?? []
+            if let cachedPinnedKeys { return cachedPinnedKeys }
+            let value = defaults.stringArray(forKey: pinnedKeysKey) ?? []
+            cachedPinnedKeys = value
+            return value
         }
         set {
+            guard newValue != pinnedKeys else { return }
             objectWillChange.send()
+            cachedPinnedKeys = newValue
             defaults.set(newValue, forKey: pinnedKeysKey)
         }
     }
@@ -252,10 +278,15 @@ public final class TweakStorage: ObservableObject {
     public private(set) var recentKeys: [String] {
         get {
             guard TweakIt.isEnabled else { return [] }
-            return defaults.stringArray(forKey: recentKeysKey) ?? []
+            if let cachedRecentKeys { return cachedRecentKeys }
+            let value = defaults.stringArray(forKey: recentKeysKey) ?? []
+            cachedRecentKeys = value
+            return value
         }
         set {
+            guard newValue != recentKeys else { return }
             objectWillChange.send()
+            cachedRecentKeys = newValue
             defaults.set(newValue, forKey: recentKeysKey)
         }
     }
