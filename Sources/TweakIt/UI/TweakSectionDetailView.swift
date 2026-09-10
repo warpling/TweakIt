@@ -202,24 +202,21 @@ private struct ResetSwipeModifier: ViewModifier {
 @available(iOS 16.0, *)
 private struct PinSwipeModifier: ViewModifier {
     let tweakID: String
-    let storage: TweakStorage
 
-    /// Mirrors `storage.isPinned` so the button title flips the moment it's tapped — the same
-    /// local-state pattern the value rows use. Storage stays the source of truth.
-    @State private var isPinned: Bool
+    /// ⚠️ Observed, and the pinned flag is read straight from it rather than mirrored into
+    /// `@State`. A `@State` mirror is seeded once per view identity and never re-seeded, so a row
+    /// pinned from anywhere else — the Quick Access list, or simply a row that existed before the
+    /// pin — kept offering "Pin" for something already pinned. Cheap here: a pin is one write,
+    /// not a per-tick slider drag, so there is no churn to debounce against.
+    @ObservedObject var storage: TweakStorage
 
-    init(tweakID: String, storage: TweakStorage) {
-        self.tweakID = tweakID
-        self.storage = storage
-        self._isPinned = State(initialValue: storage.isPinned(key: tweakID))
-    }
+    private var isPinned: Bool { storage.isPinned(key: tweakID) }
 
     func body(content: Content) -> some View {
         content
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
                     storage.togglePin(key: tweakID)
-                    isPinned = storage.isPinned(key: tweakID)
                 } label: {
                     Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash.fill" : "pin.fill")
                 }
