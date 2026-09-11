@@ -75,9 +75,31 @@ public final class TweakStorage: ObservableObject {
     // it, sound as long as nothing else writes these keys — see the type's docs.
 
     /// Guards every cache below. A plain (non-recursive) lock: the public methods take it, do
-    /// their work through the `_`-prefixed unlocked helpers, and release it *before* sending
-    /// `objectWillChange`, so an observer that reads storage synchronously can't deadlock.
+    /// their work through the `_`-prefixed unlocked helpers, and release it *before* touching
+    /// `UserDefaults` or sending `objectWillChange`, so an observer that reads storage
+    /// synchronously can't deadlock.
+    ///
+    /// ⚠️ **Nothing may write `UserDefaults` while this lock is held.** `UserDefaults` posts
+    /// `didChangeNotification` SYNCHRONOUSLY, on the writing thread, before the write call
+    /// returns. An observer of that notification that reads a tweak lands back in
+    /// ``value(forKey:default:)`` and waits on a lock its own caller owns — a self-deadlock that
+    /// needs a force quit, from an ordinary toggle. 1.2.0 shipped exactly that: it added the lock
+    /// (there was none through 1.1.0, which is why the same re-entrant read had always been
+    /// harmless) and kept writing defaults underneath it. Writes are therefore queued into
+    /// ``pendingWrites`` and flushed by ``flushPendingWrites()`` once the lock is down.
+    ///
+    /// Reads of `UserDefaults` are fine under the lock — they notify nobody.
     private let lock = NSLock()
+
+    /// A `UserDefaults` write queued while ``lock`` was held. Keys are already prefixed.
+    private enum PendingWrite {
+        case set(String, Any)
+        case remove(String)
+    }
+
+    /// Writes waiting for the lock to come down. Guarded by ``lock``; drained by
+    /// ``flushPendingWrites()``.
+    private var pendingWrites: [PendingWrite] = []
 
     private var cachedModifiedKeys: Set<String>?
     private var cachedPinnedKeys: [String]?
@@ -156,8 +178,8 @@ public final class TweakStorage: ObservableObject {
             // Back to the default — drop the override entirely. There's nothing to drop if there
             // wasn't one, and no reason to touch UserDefaults to find that out.
             if wasModified {
-                defaults.removeObject(forKey: prefixedKey)
                 cachedValues.removeValue(forKey: key)
+                pendingWrites.append(.remove(prefixedKey))
                 var keys = _modifiedKeys()
                 keys.remove(key)
                 _setModifiedKeys(keys)
@@ -170,8 +192,10 @@ public final class TweakStorage: ObservableObject {
             } else {
                 stored = value
             }
-            defaults.set(stored, forKey: prefixedKey)
+            // Cache first, queue second: the cache is what a re-entrant reader sees, and it must
+            // already be right when the flush below lets one in.
             cachedValues[key] = stored
+            pendingWrites.append(.set(prefixedKey, stored))
 
             if !wasModified {
                 var keys = _modifiedKeys()
@@ -182,6 +206,7 @@ public final class TweakStorage: ObservableObject {
         }
 
         lock.unlock()
+        flushPendingWrites()
 
         // One publish per call, whatever changed — an observer that has to rebuild for a value
         // change gains nothing from hearing about the recents reorder separately.
@@ -196,14 +221,15 @@ public final class TweakStorage: ObservableObject {
 
         lock.lock()
         let wasModified = _modifiedKeys().contains(key)
-        defaults.removeObject(forKey: prefix + key)
         cachedValues.removeValue(forKey: key)
+        pendingWrites.append(.remove(prefix + key))
         if wasModified {
             var keys = _modifiedKeys()
             keys.remove(key)
             _setModifiedKeys(keys)
         }
         lock.unlock()
+        flushPendingWrites()
 
         if wasModified { objectWillChange.send() }
     }
@@ -218,12 +244,13 @@ public final class TweakStorage: ObservableObject {
         var keys = _modifiedKeys()
         let keysToReset = keys.filter { $0.hasPrefix(sectionPrefix) }
         for key in keysToReset {
-            defaults.removeObject(forKey: prefix + key)
             cachedValues.removeValue(forKey: key)
+            pendingWrites.append(.remove(prefix + key))
             keys.remove(key)
         }
         let changed = _setModifiedKeys(keys)
         lock.unlock()
+        flushPendingWrites()
 
         if changed { objectWillChange.send() }
     }
@@ -235,7 +262,7 @@ public final class TweakStorage: ObservableObject {
         lock.lock()
         let keys = _modifiedKeys()
         for key in keys {
-            defaults.removeObject(forKey: prefix + key)
+            pendingWrites.append(.remove(prefix + key))
         }
         cachedValues.removeAll()
 
@@ -252,6 +279,7 @@ public final class TweakStorage: ObservableObject {
             changed = true
         }
         lock.unlock()
+        flushPendingWrites()
 
         if changed { objectWillChange.send() }
     }
@@ -265,6 +293,8 @@ public final class TweakStorage: ObservableObject {
     ///
     /// Not needed in normal use: every write made through this instance keeps the cache correct.
     public func reloadFromDisk() {
+        flushPendingWrites()
+
         lock.lock()
         cachedModifiedKeys = nil
         cachedPinnedKeys = nil
@@ -342,6 +372,7 @@ public final class TweakStorage: ObservableObject {
         }
         let changed = _setPinnedKeys(keys)
         lock.unlock()
+        flushPendingWrites()
 
         if changed { objectWillChange.send() }
     }
@@ -360,6 +391,30 @@ public final class TweakStorage: ObservableObject {
         lock.lock()
         defer { lock.unlock() }
         return _recentKeys()
+    }
+
+    // MARK: - Deferred Writes
+
+    /// Lands every queued `UserDefaults` write, with ``lock`` down.
+    ///
+    /// Each write posts `didChangeNotification` synchronously, so an observer can re-enter this
+    /// type from inside the loop. That is safe and intended: the lock is free, and the caches
+    /// were made correct before the write was queued, so a re-entrant reader sees the new value
+    /// rather than the one still on disk. A re-entrant *writer* queues and flushes its own batch;
+    /// the snapshot below is drained before any write goes out, so nothing is sent twice.
+    private func flushPendingWrites() {
+        lock.lock()
+        let writes = pendingWrites
+        pendingWrites.removeAll()
+        lock.unlock()
+
+        guard !writes.isEmpty else { return }
+        for write in writes {
+            switch write {
+            case .set(let key, let value): defaults.set(value, forKey: key)
+            case .remove(let key):         defaults.removeObject(forKey: key)
+            }
+        }
     }
 
     // MARK: - Unlocked Internals
@@ -381,7 +436,7 @@ public final class TweakStorage: ObservableObject {
         cachedModifiedKeys = newValue
         // Section counts are derived from this set and nothing else.
         cachedSectionCounts.removeAll()
-        defaults.set(Array(newValue), forKey: modifiedKeysKey)
+        pendingWrites.append(.set(modifiedKeysKey, Array(newValue)))
         return true
     }
 
@@ -396,7 +451,7 @@ public final class TweakStorage: ObservableObject {
     private func _setPinnedKeys(_ newValue: [String]) -> Bool {
         guard newValue != _pinnedKeys() else { return false }
         cachedPinnedKeys = newValue
-        defaults.set(newValue, forKey: pinnedKeysKey)
+        pendingWrites.append(.set(pinnedKeysKey, newValue))
         return true
     }
 
@@ -411,7 +466,7 @@ public final class TweakStorage: ObservableObject {
     private func _setRecentKeys(_ newValue: [String]) -> Bool {
         guard newValue != _recentKeys() else { return false }
         cachedRecentKeys = newValue
-        defaults.set(newValue, forKey: recentKeysKey)
+        pendingWrites.append(.set(recentKeysKey, newValue))
         return true
     }
 

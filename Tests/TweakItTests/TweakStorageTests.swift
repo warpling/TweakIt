@@ -474,6 +474,97 @@ final class TweakStorageTests: XCTestCase {
 
     /// Caching turned every read into a mutation of shared state. Reading a tweak off the main
     /// thread is a normal thing for a host to do, so the caches have to be locked.
+    // MARK: - Re-entrancy
+
+    // `UserDefaults` posts `didChangeNotification` SYNCHRONOUSLY on the writing thread, so an
+    // observer of it runs INSIDE the write that triggered it. If that observer reads a tweak — a
+    // debug overlay mirroring a toggle, say — it re-enters this type. 1.2.0 added the lock and
+    // kept writing defaults underneath it, so the re-entrant read waited on a lock its own caller
+    // held and the app hung hard, on every toggle, needing a force quit. Found in Blackbox,
+    // 2026-09-11.
+    //
+    // These tests deadlock rather than fail when the invariant breaks, hence the watchdog: the
+    // write runs on a background queue and the test fails if it hasn't returned in time.
+
+    /// Runs `body` off the main thread and fails if it doesn't return within `timeout`.
+    private func expectNoDeadlock(timeout: TimeInterval = 5,
+                                  _ message: String,
+                                  _ body: @escaping () -> Void) {
+        let finished = expectation(description: message)
+        DispatchQueue.global().async {
+            body()
+            finished.fulfill()
+        }
+        wait(for: [finished], timeout: timeout)
+    }
+
+    func testWritingDoesNotDeadlockAnObserverThatReadsBack() {
+        var observed: Int?
+        let token = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: defaults, queue: nil
+        ) { [storage] _ in
+            // The re-entrant read. Must not wait on the writer's lock.
+            observed = storage?.value(forKey: "reentrant", default: 0)
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        expectNoDeadlock("setValue with a re-entrant reader") {
+            self.storage.setValue(7, forKey: "reentrant", default: 0)
+        }
+
+        XCTAssertEqual(storage.value(forKey: "reentrant", default: 0), 7)
+        // The observer ran inside the write and must have seen the NEW value: caches are made
+        // correct before a write is queued, precisely so a re-entrant reader isn't served the
+        // value still sitting on disk.
+        XCTAssertEqual(observed, 7, "a re-entrant reader saw a stale value")
+    }
+
+    func testResettingDoesNotDeadlockAnObserverThatReadsBack() {
+        storage.setValue(7, forKey: "reentrant", default: 0)
+
+        let token = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: defaults, queue: nil
+        ) { [storage] _ in
+            _ = storage?.value(forKey: "reentrant", default: 0)
+            _ = storage?.isModified(key: "reentrant")
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        expectNoDeadlock("reset with a re-entrant reader") {
+            self.storage.reset(key: "reentrant")
+        }
+        expectNoDeadlock("resetAll with a re-entrant reader") {
+            self.storage.setValue(9, forKey: "reentrant", default: 0)
+            self.storage.resetAll()
+        }
+        expectNoDeadlock("togglePin with a re-entrant reader") {
+            self.storage.togglePin(key: "reentrant")
+        }
+
+        XCTAssertEqual(storage.value(forKey: "reentrant", default: 0), 0)
+    }
+
+    /// An observer that WRITES from inside the notification — the nastiest shape, because its
+    /// write queues and flushes its own batch while the outer flush is still draining.
+    func testWritingFromInsideTheNotificationDoesNotDeadlockOrLoseWrites() {
+        var reentered = false
+        let token = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: defaults, queue: nil
+        ) { [storage] _ in
+            guard !reentered else { return }   // one hop, or this recurses forever by design
+            reentered = true
+            storage?.setValue("inner", forKey: "written.by.observer", default: "")
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        expectNoDeadlock("setValue with a re-entrant writer") {
+            self.storage.setValue("outer", forKey: "written.by.caller", default: "")
+        }
+
+        XCTAssertEqual(storage.value(forKey: "written.by.caller", default: ""), "outer")
+        XCTAssertEqual(storage.value(forKey: "written.by.observer", default: ""), "inner")
+    }
+
     func testConcurrentReadsAndWritesDoNotCorruptState() {
         storage.setValue(1, forKey: "shared", default: 0)
 
