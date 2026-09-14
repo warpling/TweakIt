@@ -103,7 +103,11 @@ final class TweakPanelWindowManager: NSObject {
             bottomOffset: buttonBottomOffset,
             content: { content }
         )
-        let hostingController = UIHostingController(rootView: container)
+        // NOT a plain UIHostingController: an overlay window's root view
+        // controller is what UIKit asks about the status bar, and a plain
+        // one answers with its own defaults instead of the app's. See
+        // `HostStatusBarDeferringHostingController`.
+        let hostingController = HostStatusBarDeferringHostingController(rootView: container)
         hostingController.view.backgroundColor = .clear
         hostingController.view.isOpaque = false
         btnWin.rootViewController = hostingController
@@ -189,6 +193,41 @@ final class TweakPanelWindowManager: NSObject {
 /// so the completion has to check that the sheet actually went away.
 private class PanelRootViewController: UIViewController {
     var onDismissCompletion: (() -> Void)?
+
+    // MARK: Status bar / home indicator — the app's business, not ours
+    //
+    // This window sits ABOVE the app at `.normal + 10`, which is exactly
+    // what makes UIKit ask it. When a panel is presented UIKit asks the
+    // presented sheet instead and these never run; the rest of the time
+    // they repeat whatever the host app asked for. See
+    // `HostStatusBarDeferral.swift` for what went wrong without them.
+
+    private var hostStatusBarResponder: UIViewController? {
+        HostStatusBar.hostResponder(near: view.window) { $0.childForStatusBarHidden }
+    }
+
+    private var hostStatusBarStyleResponder: UIViewController? {
+        HostStatusBar.hostResponder(near: view.window) { $0.childForStatusBarStyle }
+    }
+
+    override var prefersStatusBarHidden: Bool {
+        hostStatusBarResponder?.prefersStatusBarHidden ?? super.prefersStatusBarHidden
+    }
+
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        hostStatusBarStyleResponder?.preferredStatusBarStyle ?? super.preferredStatusBarStyle
+    }
+
+    override var prefersHomeIndicatorAutoHidden: Bool {
+        HostStatusBar.hostResponder(near: view.window) { $0.childForHomeIndicatorAutoHidden }?
+            .prefersHomeIndicatorAutoHidden ?? super.prefersHomeIndicatorAutoHidden
+    }
+
+    // Nil, so the answers above are the final word rather than being
+    // handed off to a child that would go back to UIKit's defaults.
+    override var childForStatusBarHidden: UIViewController? { nil }
+    override var childForStatusBarStyle: UIViewController? { nil }
+    override var childForHomeIndicatorAutoHidden: UIViewController? { nil }
 
     override func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
         let hadPresented = presentedViewController != nil
