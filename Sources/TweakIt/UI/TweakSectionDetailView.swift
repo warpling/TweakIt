@@ -111,7 +111,15 @@ public struct MasterToggleRow: View {
                     .frame(width: 12, height: 12)
             }
 
-            Toggle("Enable Overrides", isOn: $isEnabled)
+            Toggle(isOn: $isEnabled) {
+                // Same trick as the tweak toggles: the label claims the row's whole width so a
+                // tap anywhere left of the switch flips it, and the gesture stays inside the
+                // label so it can never overlap the switch and fire twice.
+                Text("Enable Overrides")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { isEnabled.toggle() }
+            }
                 .onChange(of: isEnabled) { newValue in
                     storage.setValue(newValue, forKey: section.id + ".isEnabled", default: false)
                     refreshID = UUID()
@@ -275,6 +283,26 @@ private struct TweakDescriptionText: View {
     }
 }
 
+// MARK: - Modified Indicator
+
+/// The orange dot marking a tweak whose value differs from its default.
+///
+/// Decorative: the row's accessibility label already carries the value, and a dot that announced
+/// itself would interrupt every VoiceOver pass over a modified row.
+@available(iOS 16.0, *)
+private struct ModifiedDot: View {
+    let isModified: Bool
+
+    var body: some View {
+        if isModified {
+            Circle()
+                .fill(.orange)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 // MARK: - Toggle Row
 
 @available(iOS 16.0, *)
@@ -291,19 +319,21 @@ private struct ToggleTweakRow: View {
     }
 
     var body: some View {
-        HStack {
-            Toggle(isOn: $value) {
+        Toggle(isOn: $value) {
+            HStack {
                 TweakLabel(tweak: tweak)
+                ModifiedDot(isModified: storage.isModified(key: tweak.id))
+                Spacer(minLength: 0)
             }
-                .onChange(of: value) { newValue in
-                    storage.setValue(newValue, forKey: tweak.id, default: tweak.defaultValue as? Bool ?? false)
-                }
-
-            if storage.isModified(key: tweak.id) {
-                Circle()
-                    .fill(.orange)
-                    .frame(width: 6, height: 6)
-            }
+            // The label fills everything left of the switch, so the whole row flips the toggle.
+            // The gesture lives *inside* the label rather than on the row: a tap gesture wrapping
+            // the row would sit over the UISwitch too, and both would fire — flipping twice and
+            // landing back where it started.
+            .contentShape(Rectangle())
+            .onTapGesture { value.toggle() }
+        }
+        .onChange(of: value) { newValue in
+            storage.setValue(newValue, forKey: tweak.id, default: tweak.defaultValue as? Bool ?? false)
         }
         .resetSwipeAction(tweakID: tweak.id, storage: storage) {
             storage.reset(key: tweak.id)
@@ -341,10 +371,10 @@ private struct SliderTweakRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(tweak.name)
-                Spacer()
-                if isEditing {
+            if isEditing {
+                HStack {
+                    Text(tweak.name)
+                    Spacer()
                     TextField("", text: $editText, onCommit: commitEdit)
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.roundedBorder)
@@ -361,20 +391,29 @@ private struct SliderTweakRow: View {
                                 Button("Done") { commitEdit() }
                             }
                         }
-                } else {
-                    Text(formattedValue)
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-                        .onTapGesture {
-                            editText = formattedValue
-                            isEditing = true
-                        }
+                    ModifiedDot(isModified: storage.isModified(key: tweak.id))
                 }
-                if storage.isModified(key: tweak.id) {
-                    Circle()
-                        .fill(.orange)
-                        .frame(width: 6, height: 6)
+            } else {
+                // The whole name-and-value line opens the numeric editor, not just the number.
+                // A four-character value like "0.250" is a ~35pt target; the line is the full row.
+                Button {
+                    editText = formattedValue
+                    isEditing = true
+                } label: {
+                    HStack {
+                        Text(tweak.name)
+                        Spacer()
+                        Text(formattedValue)
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                        ModifiedDot(isModified: storage.isModified(key: tweak.id))
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tweak.name)
+                .accessibilityValue(formattedValue)
+                .accessibilityHint("Type an exact value")
             }
 
             if let description = tweak.description {
@@ -386,6 +425,7 @@ private struct SliderTweakRow: View {
                     .onChange(of: value) { newValue in
                         storage.setValue(newValue, forKey: tweak.id, default: sliderDefault)
                     }
+                    .accessibilityLabel(tweak.name)
             }
         }
         .resetSwipeAction(tweakID: tweak.id, storage: storage) {
@@ -448,17 +488,10 @@ private struct StepperTweakRow: View {
 
     var body: some View {
         HStack {
-            TweakLabel(tweak: tweak)
-
-            if storage.isModified(key: tweak.id) {
-                Circle()
-                    .fill(.orange)
-                    .frame(width: 6, height: 6)
-            }
-
-            Spacer()
-
             if isEditing {
+                TweakLabel(tweak: tweak)
+                ModifiedDot(isModified: storage.isModified(key: tweak.id))
+                Spacer()
                 TextField("", text: $editText, onCommit: commitEdit)
                     .keyboardType(.numberPad)
                     .textFieldStyle(.roundedBorder)
@@ -476,12 +509,25 @@ private struct StepperTweakRow: View {
                         }
                     }
             } else {
-                Text("\(value)")
-                    .monospacedDigit()
-                    .onTapGesture {
-                        editText = "\(value)"
-                        isEditing = true
+                // Everything left of the +/- control opens the numeric editor. `.plain` keeps the
+                // label looking like a label; `.borderless` would tint the tweak's name blue.
+                Button {
+                    editText = "\(value)"
+                    isEditing = true
+                } label: {
+                    HStack {
+                        TweakLabel(tweak: tweak)
+                        ModifiedDot(isModified: storage.isModified(key: tweak.id))
+                        Spacer()
+                        Text("\(value)")
+                            .monospacedDigit()
                     }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tweak.name)
+                .accessibilityValue("\(value)")
+                .accessibilityHint("Type an exact value")
             }
 
             Stepper("", value: $value)
@@ -489,6 +535,7 @@ private struct StepperTweakRow: View {
                 .onChange(of: value) { newValue in
                     storage.setValue(newValue, forKey: tweak.id, default: tweak.defaultValue as? Int ?? 0)
                 }
+                .accessibilityLabel(tweak.name)
         }
         .resetSwipeAction(tweakID: tweak.id, storage: storage) {
             storage.reset(key: tweak.id)
@@ -506,6 +553,19 @@ private struct StepperTweakRow: View {
 
 // MARK: - Picker Row
 
+/// A tweak with a fixed set of string options, as a stock menu `Picker`.
+///
+/// Deliberately a real `Picker` rather than a hand-rolled `Menu` of `Button`s. Two things come
+/// free with it and neither is reliably reproducible by hand:
+///
+/// - **The whole row opens the menu.** A `Menu` is only tappable across its own label, which here
+///   was a short value string and a chevron — a target a few dozen points wide at the far right
+///   of the row.
+/// - **The menu items are real `UIMenu` actions**, so each one is tappable across the full width
+///   of the popover and the selected option gets the system checkmark. A `Menu` whose items are
+///   custom views (the old code branched between `Label` and `Text` to draw its own checkmark)
+///   drops out of that bridge and gets SwiftUI-drawn items, where only the glyphs themselves are
+///   hit-testable — hence taps landing in the gaps and doing nothing.
 @available(iOS 16.0, *)
 private struct PickerTweakRow: View {
     let tweak: TweakMetadata
@@ -520,45 +580,20 @@ private struct PickerTweakRow: View {
     }
 
     var body: some View {
-        HStack {
-            TweakLabel(tweak: tweak)
-                .onTapGesture(count: 2) {
-                    storage.reset(key: tweak.id)
-                    value = tweak.defaultValue as? String ?? ""
-                }
-
-            Spacer()
-
-            Menu {
-                ForEach(tweak.options ?? [], id: \.self) { option in
-                    Button {
-                        value = option
-                    } label: {
-                        if option == value {
-                            Label(option.isEmpty ? "(empty)" : option, systemImage: "checkmark")
-                        } else {
-                            Text(option.isEmpty ? "(empty)" : option)
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(value.isEmpty ? "(empty)" : value)
-                        .foregroundColor(.secondary)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
+        Picker(selection: $value) {
+            ForEach(tweak.options ?? [], id: \.self) { option in
+                Text(option.isEmpty ? "(empty)" : option)
+                    .tag(option)
             }
-            .onChange(of: value) { newValue in
-                storage.setValue(newValue, forKey: tweak.id, default: tweak.defaultValue as? String ?? "")
+        } label: {
+            HStack {
+                TweakLabel(tweak: tweak)
+                ModifiedDot(isModified: storage.isModified(key: tweak.id))
             }
-
-            if storage.isModified(key: tweak.id) {
-                Circle()
-                    .fill(.orange)
-                    .frame(width: 6, height: 6)
-            }
+        }
+        .pickerStyle(.menu)
+        .onChange(of: value) { newValue in
+            storage.setValue(newValue, forKey: tweak.id, default: tweak.defaultValue as? String ?? "")
         }
         .resetSwipeAction(tweakID: tweak.id, storage: storage) {
             storage.reset(key: tweak.id)
@@ -574,6 +609,7 @@ private struct TextTweakRow: View {
     let tweak: TweakMetadata
     let storage: TweakStorage
     @State private var value: String
+    @FocusState private var isFocused: Bool
 
     init(tweak: TweakMetadata, storage: TweakStorage) {
         self.tweak = tweak
@@ -584,22 +620,23 @@ private struct TextTweakRow: View {
 
     var body: some View {
         HStack {
-            TweakLabel(tweak: tweak)
-
-            if storage.isModified(key: tweak.id) {
-                Circle()
-                    .fill(.orange)
-                    .frame(width: 6, height: 6)
+            HStack {
+                TweakLabel(tweak: tweak)
+                ModifiedDot(isModified: storage.isModified(key: tweak.id))
+                Spacer(minLength: 0)
             }
-
-            Spacer()
+            // Tapping the name focuses the field, so the dead space between them isn't dead.
+            .contentShape(Rectangle())
+            .onTapGesture { isFocused = true }
 
             TextField("Value", text: $value)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 150)
+                .focused($isFocused)
                 .onChange(of: value) { newValue in
                     storage.setValue(newValue, forKey: tweak.id, default: tweak.defaultValue as? String ?? "")
                 }
+                .accessibilityLabel(tweak.name)
         }
         .resetSwipeAction(tweakID: tweak.id, storage: storage) {
             storage.reset(key: tweak.id)
