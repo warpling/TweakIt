@@ -393,6 +393,28 @@ public final class TweakStorage: ObservableObject {
         return _recentKeys()
     }
 
+    /// Drops a key from ``recentKeys``, leaving its value, its pin and the modified set alone.
+    ///
+    /// The panel calls this when you unpin a row. A pin and a recent edit both float a tweak into
+    /// Quick Access, so unpinning a tweak you had also just edited used to leave the row sitting
+    /// exactly where it was — the unpin had worked, the row simply had a second reason to be
+    /// there, and the gesture read as broken. The tweak comes back the next time you edit it.
+    public func forgetRecent(key: String) {
+        guard TweakIt.isEnabled else { return }
+
+        lock.lock()
+        var keys = _recentKeys()
+        var changed = false
+        if let index = keys.firstIndex(of: key) {
+            keys.remove(at: index)
+            changed = _setRecentKeys(keys)
+        }
+        lock.unlock()
+        flushPendingWrites()
+
+        if changed { objectWillChange.send() }
+    }
+
     // MARK: - Deferred Writes
 
     /// Lands every queued `UserDefaults` write, with ``lock`` down.

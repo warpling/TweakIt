@@ -224,7 +224,12 @@ private struct PinSwipeModifier: ViewModifier {
         content
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 Button {
+                    let wasPinned = isPinned
                     storage.togglePin(key: tweakID)
+                    // Unpinning means "get this out of Quick Access", and a recent edit floats a
+                    // row in there just as a pin does. Without this the row stays put and the
+                    // gesture looks broken. It returns when the tweak is next edited or pinned.
+                    if wasPinned { storage.forgetRecent(key: tweakID) }
                 } label: {
                     Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash.fill" : "pin.fill")
                 }

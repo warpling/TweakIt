@@ -23,11 +23,18 @@ public struct TweaksListView: View {
     @State private var searchText = ""
     @State private var expandedCategories: Set<String> = ExpandedCategories.load()
 
-    /// Recents are snapshotted when the list appears rather than read live. `setValue` moves a key
-    /// to the front of the recents list on the very first slider tick, and a row that reorders
-    /// itself out from under the finger dragging it is far worse than a slightly stale order.
-    /// Popping back from a section detail re-fires `onAppear`, so edits made there do show up.
-    @State private var recentKeysSnapshot: [String] = []
+    /// The order Quick Access rows sit in, snapshotted when the list appears rather than derived
+    /// live from pins and recents.
+    ///
+    /// Two things would otherwise move a row while you were using it. `setValue` promotes a key to
+    /// the front of the recents list on the very first slider tick, and pinning a row used to jump
+    /// it up into the pinned run — mid-swipe, so the List's reorder animation ran on top of the
+    /// swipe's dismissal and the row visibly overlapped its neighbour before settling.
+    ///
+    /// Only the order is frozen. Membership stays live (see ``quickAccessEntries``), so unpinning
+    /// a row drops it immediately. Popping back from a section detail re-fires `onAppear` and
+    /// re-sorts, which is when a newly pinned tweak takes its place at the top.
+    @State private var quickAccessOrder: [String] = []
 
     @ObservedObject private var storage: TweakStorage
 
@@ -92,7 +99,7 @@ public struct TweaksListView: View {
         }
         .listStyle(.insetGrouped)
         .searchable(text: $searchText, prompt: "Search tweaks")
-        .onAppear { recentKeysSnapshot = storage.recentKeys }
+        .onAppear { quickAccessOrder = Self.freshQuickAccessOrder(storage: storage) }
     }
 
     // MARK: - Quick Access
@@ -127,16 +134,29 @@ public struct TweaksListView: View {
         }
     }
 
-    /// Pinned keys in pin order, then recents that aren't already pinned, capped and resolved.
-    private var quickAccessEntries: [QuickAccessEntry] {
+    /// Pinned keys in pin order, then recents that aren't already pinned.
+    ///
+    /// Read once per appearance into ``quickAccessOrder``; from then on the order is held still
+    /// and only membership is re-checked.
+    private static func freshQuickAccessOrder(storage: TweakStorage) -> [String] {
         let pinnedKeys = storage.pinnedKeys
         let pinned = Set(pinnedKeys)
-        let keys = pinnedKeys + recentKeysSnapshot.filter { !pinned.contains($0) }
-        guard !keys.isEmpty else { return [] }
+        return pinnedKeys + storage.recentKeys.filter { !pinned.contains($0) }
+    }
+
+    /// The frozen order, filtered to the keys that still belong in Quick Access, capped and
+    /// resolved against the store.
+    private var quickAccessEntries: [QuickAccessEntry] {
+        guard !quickAccessOrder.isEmpty else { return [] }
+        let pinned = Set(storage.pinnedKeys)
+        let recent = Set(storage.recentKeys)
 
         var entries = [QuickAccessEntry]()
-        for key in keys {
+        for key in quickAccessOrder {
             guard entries.count < Self.quickAccessLimit else { break }
+            // Live membership over a frozen order: a row that stops being pinned *and* stops
+            // being recent leaves at once, while every row that stays keeps its position.
+            guard pinned.contains(key) || recent.contains(key) else { continue }
             // Ghost keys: a pin or recent naming a tweak that was since renamed or deleted
             // resolves to nothing. Skip it rather than render a dead row.
             guard let tweak = store.tweak(forKey: key),

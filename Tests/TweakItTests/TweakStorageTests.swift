@@ -182,6 +182,51 @@ final class TweakStorageTests: XCTestCase {
         XCTAssertEqual(reloaded.recentKeys, ["a"])
     }
 
+    func testForgetRecentDropsOnlyThatKey() {
+        storage.setValue(1, forKey: "a", default: 0)
+        storage.setValue(1, forKey: "b", default: 0)
+        storage.setValue(1, forKey: "c", default: 0)
+
+        storage.forgetRecent(key: "b")
+
+        XCTAssertEqual(storage.recentKeys, ["c", "a"], "The rest keep their order")
+    }
+
+    func testForgetRecentLeavesValuePinAndModifiedAlone() {
+        storage.setValue(7, forKey: "a", default: 0)
+        storage.togglePin(key: "a")
+
+        storage.forgetRecent(key: "a")
+
+        XCTAssertEqual(storage.value(forKey: "a", default: 0), 7)
+        XCTAssertTrue(storage.isPinned(key: "a"), "Unpinning is the caller's job, not this one's")
+        XCTAssertTrue(storage.isModified(key: "a"))
+    }
+
+    /// The row comes back on the next edit — that's the whole contract the panel relies on when
+    /// it evicts an unpinned row from Quick Access.
+    func testForgetRecentIsUndoneByEditingAgain() {
+        storage.setValue(1, forKey: "a", default: 0)
+        storage.forgetRecent(key: "a")
+        XCTAssertTrue(storage.recentKeys.isEmpty)
+
+        storage.setValue(2, forKey: "a", default: 0)
+        XCTAssertEqual(storage.recentKeys, ["a"])
+    }
+
+    func testForgetRecentIsSilentForAKeyThatIsntRecent() {
+        storage.setValue(1, forKey: "a", default: 0)
+
+        var publishCount = 0
+        let token = storage.objectWillChange.sink { _ in publishCount += 1 }
+        defer { token.cancel() }
+
+        storage.forgetRecent(key: "never-edited")
+
+        XCTAssertEqual(storage.recentKeys, ["a"])
+        XCTAssertEqual(publishCount, 0, "No change, no publish")
+    }
+
     // MARK: - Pins
 
     func testTogglePinRoundTrip() {
