@@ -48,7 +48,8 @@ public struct TweakSectionDetailView: View {
         .navigationTitle(section.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            // Semantic placement — see the note in TweakPanelView's toolbar.
+            ToolbarItem(placement: .primaryAction) {
                 Button("Reset") {
                     storage.resetSection(section.id)
                     refreshID = UUID()

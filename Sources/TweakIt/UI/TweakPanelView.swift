@@ -94,7 +94,12 @@ struct TweakPanelView: View {
             .navigationTitle(tabs.isEmpty ? "Tweaks" : "Dev Tools")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                // Semantic placements, not `.navigationBar{Leading,Trailing}`. A positional
+                // placement pins the item to a screen edge; the semantic ones tell the system
+                // what the button *is*, so it can put the dismiss and overflow controls where
+                // that device's bar wants them (iPhone Duo's inner display in iOS 27 lays the
+                // top bar out differently, and hard-coded edges land in the wrong slot there).
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
                         willDismiss?()
                         onDismiss?()
@@ -102,7 +107,7 @@ struct TweakPanelView: View {
                     }
                 }
                 if tabs.isEmpty || selectedTabIndex == 0 {
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItem(placement: .primaryAction) {
                         Menu {
                             Button(role: .destructive) {
                                 store.storage.resetAll()
