@@ -63,6 +63,30 @@ struct TweakPanelView: View {
         return icons
     }
 
+    /// The panel's dismiss control.
+    ///
+    /// A close, not a cancel. Tweaks apply the instant you touch them, so dismissing the panel
+    /// discards nothing — which is exactly the line Apple draws between the two roles. Saying
+    /// `.close` rather than hard-coding a label is what lets the system render the standard X
+    /// and place it per device; on iPhone Duo that means the top of the vertical bar.
+    ///
+    /// The close role is iOS 26+. Older systems keep the "Done" label, which is fine — none of
+    /// them run on hardware that lays the bar out any differently.
+    @ViewBuilder
+    private var dismissButton: some View {
+        if #available(iOS 26.0, *) {
+            Button(role: .close) { performDismiss() }
+        } else {
+            Button("Done") { performDismiss() }
+        }
+    }
+
+    private func performDismiss() {
+        willDismiss?()
+        onDismiss?()
+        dismiss()
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -93,18 +117,16 @@ struct TweakPanelView: View {
             .background(DisableInteractivePopGesture())
             .navigationTitle(tabs.isEmpty ? "Tweaks" : "Dev Tools")
             .navigationBarTitleDisplayMode(.inline)
+            .disablingVerticalToolbar()
             .toolbar {
                 // Semantic placements, not `.navigationBar{Leading,Trailing}`. A positional
                 // placement pins the item to a screen edge; the semantic ones tell the system
                 // what the button *is*, so it can put the dismiss and overflow controls where
-                // that device's bar wants them (iPhone Duo's inner display in iOS 27 lays the
-                // top bar out differently, and hard-coded edges land in the wrong slot there).
+                // that device's bar wants them. iPhone Duo is the case that forced this:
+                // Apple's guidance is that close buttons go in `.cancellationAction`, which
+                // the system hoists to the top of the Duo's vertical bar.
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        willDismiss?()
-                        onDismiss?()
-                        dismiss()
-                    }
+                    dismissButton
                 }
                 if tabs.isEmpty || selectedTabIndex == 0 {
                     ToolbarItem(placement: .primaryAction) {
@@ -121,5 +143,31 @@ struct TweakPanelView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Vertical Toolbar Opt-Out
+
+private extension View {
+    /// Keeps the panel's toolbar horizontal on iPhone Duo (iOS 27.1+).
+    ///
+    /// Duo moves a sheet's toolbar onto a vertical bar down the side of the sheet, which costs
+    /// width a control-heavy panel can't spare — this one is a segmented picker over dense rows
+    /// of sliders and switches. Apple's opt-out for exactly that case is
+    /// `toolbarVerticalBehavior(.disabled)`, which leaves the dismiss button in the sheet's
+    /// top corner and gives the content the full width back.
+    ///
+    /// The `compiler` check keeps TweakIt building on Xcode 26, whose SDK has no such modifier.
+    @ViewBuilder
+    func disablingVerticalToolbar() -> some View {
+        #if compiler(>=6.4) // Xcode 27 and up
+        if #available(iOS 27.1, *) {
+            toolbarVerticalBehavior(.disabled)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }
