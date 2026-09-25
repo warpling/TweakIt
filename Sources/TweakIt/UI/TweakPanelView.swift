@@ -157,10 +157,14 @@ private extension View {
     /// `toolbarVerticalBehavior(.disabled)`, which leaves the dismiss button in the sheet's
     /// top corner and gives the content the full width back.
     ///
-    /// The `compiler` check keeps TweakIt building on Xcode 26, whose SDK has no such modifier.
+    /// The modifier exists only in the iOS 27.1 SDK, so the guard has to ask which SwiftUI it's
+    /// compiling against. `#if compiler(...)` can't: Xcode 27.0 and 27.1 ship the same Swift 6.4,
+    /// and the 27.0 SDK has no such modifier. SwiftUI's module version does move — 8.0.84 in the
+    /// 27.0 SDK, 8.0.85 in 27.1 — and Xcode 26's is lower still, so every older SDK compiles the
+    /// plain `self` branch.
     @ViewBuilder
     func disablingVerticalToolbar() -> some View {
-        #if compiler(>=6.4) // Xcode 27 and up
+        #if canImport(SwiftUI, _version: 8.0.85) // iOS 27.1 SDK and up
         if #available(iOS 27.1, *) {
             toolbarVerticalBehavior(.disabled)
         } else {
