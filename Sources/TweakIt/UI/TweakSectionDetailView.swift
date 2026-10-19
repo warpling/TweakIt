@@ -150,11 +150,19 @@ public struct TweakRow: View {
     let tweak: TweakMetadata
     let storage: TweakStorage
     var isDisabled: Bool = false
+    /// Whether the row is sitting in Quick Access, which changes what its pin swipe offers.
+    /// Internal: only the panel's own Quick Access list sets it.
+    var isInQuickAccess: Bool = false
 
     public init(tweak: TweakMetadata, storage: TweakStorage, isDisabled: Bool = false) {
         self.tweak = tweak
         self.storage = storage
         self.isDisabled = isDisabled
+    }
+
+    init(tweak: TweakMetadata, storage: TweakStorage, isDisabled: Bool, isInQuickAccess: Bool) {
+        self.init(tweak: tweak, storage: storage, isDisabled: isDisabled)
+        self.isInQuickAccess = isInQuickAccess
     }
 
     public var body: some View {
@@ -179,7 +187,7 @@ public struct TweakRow: View {
         // Deliberately outside `.disabled`: a row switched off by its section's master toggle
         // must still be pinnable and, more importantly, unpinnable. Otherwise pinning a tweak
         // and then turning its section off strands the pin with no way to swipe it away.
-        .pinSwipeAction(tweakID: tweak.id, storage: storage)
+        .pinSwipeAction(tweakID: tweak.id, storage: storage, isInQuickAccess: isInQuickAccess)
     }
 }
 
@@ -208,9 +216,16 @@ private struct ResetSwipeModifier: ViewModifier {
 /// The leading edge, deliberately: the trailing edge is already a full-swipe Reset, and sharing
 /// it would make a fast full swipe ambiguous — occasionally throwing away a value someone had
 /// just dialled in because they meant to pin it.
+///
+/// In Quick Access the swipe is about getting a row *out*. A row there is either pinned or was
+/// floated in by a recent edit, and nothing about the row says which — the section header wears a
+/// pin either way. Offering "Pin" on a recent row read as "Pin" on something already pinned, with
+/// no way to make it leave. So a recent row there leads with "Remove", which forgets the recent
+/// edit, and keeps "Pin" as the second button for promoting it to a real pin.
 @available(iOS 16.0, *)
 private struct PinSwipeModifier: ViewModifier {
     let tweakID: String
+    let isInQuickAccess: Bool
 
     /// ⚠️ Observed, and the pinned flag is read straight from it rather than mirrored into
     /// `@State`. A `@State` mirror is seeded once per view identity and never re-seeded, so a row
@@ -224,6 +239,15 @@ private struct PinSwipeModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                // First button is the full-swipe one.
+                if isInQuickAccess && !isPinned {
+                    Button {
+                        storage.forgetRecent(key: tweakID)
+                    } label: {
+                        Label("Remove", systemImage: "pin.slash.fill")
+                    }
+                    .tint(.gray)
+                }
                 Button {
                     let wasPinned = isPinned
                     storage.togglePin(key: tweakID)
@@ -245,8 +269,8 @@ private extension View {
         modifier(ResetSwipeModifier(tweakID: tweakID, storage: storage, onReset: onReset))
     }
 
-    func pinSwipeAction(tweakID: String, storage: TweakStorage) -> some View {
-        modifier(PinSwipeModifier(tweakID: tweakID, storage: storage))
+    func pinSwipeAction(tweakID: String, storage: TweakStorage, isInQuickAccess: Bool) -> some View {
+        modifier(PinSwipeModifier(tweakID: tweakID, isInQuickAccess: isInQuickAccess, storage: storage))
     }
 }
 

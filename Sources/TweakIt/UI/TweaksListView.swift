@@ -111,7 +111,7 @@ public struct TweaksListView: View {
             Section {
                 ForEach(entries) { entry in
                     VStack(alignment: .leading, spacing: 2) {
-                        TweakRow(tweak: entry.tweak, storage: storage, isDisabled: entry.isDisabled)
+                        TweakRow(tweak: entry.tweak, storage: storage, isDisabled: entry.isDisabled, isInQuickAccess: true)
 
                         HStack(spacing: 3) {
                             if entry.isPinned {
